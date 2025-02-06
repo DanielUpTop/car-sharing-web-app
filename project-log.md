@@ -62,6 +62,51 @@ A full-stack car-sharing web application built with React, Node.js, and MySQL, e
 - Defined development phases
 - Planning project structure
 
+#### Backend Setup
+- Initialized Node.js backend project structure
+- Installed core dependencies:
+  - express: Web application framework
+  - cors: Cross-Origin Resource Sharing middleware
+  - dotenv: Environment variables management
+  - mysql2: MySQL database driver
+  - bcryptjs: Password hashing
+  - jsonwebtoken: JWT authentication
+- Created basic server configuration
+- Set up initial project structure:
+  ```
+  backend/
+  ├── src/
+  │   ├── routes/
+  │   ├── controllers/
+  │   ├── middleware/
+  │   ├── models/
+  │   ├── config/
+  │   └── server.js
+  ├── package.json
+  └── .env
+  ```
+
+#### Next Steps:
+- Implement database configuration
+- Set up authentication routes
+- Create user model
+
+#### Technical Decisions:
+- Chose Express.js for its robust middleware system and extensive community support
+- Implemented modular folder structure for better code organization and maintainability
+- Used environment variables for secure configuration management
+
+#### Backend Development Progress
+- Successfully initialized Node.js project
+- Installed all required dependencies:
+  ```
+  express, cors, dotenv, mysql2, bcryptjs, jsonwebtoken
+  ```
+- Encountered and resolved port conflict issue:
+  - Error: EADDRINUSE (Address already in use) on port 5000
+  - Solution: Changed server port to 5001 in environment configuration
+  - Learning: Important to handle port conflicts in development environment
+
 ## Next Steps
 1. Set up the development environment
 2. Initialize the React frontend
