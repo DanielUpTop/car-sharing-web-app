@@ -77,12 +77,17 @@ A full-stack car-sharing web application built with React, Node.js, and MySQL, e
   backend/
   ├── src/
   │   ├── routes/
-  │   ├── controllers/
-  │   ├── middleware/
-  │   ├── models/
-  │   ├── config/
-  │   └── server.js
-  ├── package.json
+  │   │   ├── controllers/
+  │   │   ├── middleware/
+  │   │   ├── models/
+  │   │   ├── config/
+  │   │   └── server.js
+  │   │   └── authRoutes.js
+  │   │   └── authController.js
+  │   │   └── authMiddleware.js
+  │   │   └── userModel.js
+  │   │   └── dbConfig.js
+  │   └── package.json
   └── .env
   ```
 
@@ -95,6 +100,9 @@ A full-stack car-sharing web application built with React, Node.js, and MySQL, e
 - Chose Express.js for its robust middleware system and extensive community support
 - Implemented modular folder structure for better code organization and maintainability
 - Used environment variables for secure configuration management
+- Used MySQL connection pooling for better performance
+- Implemented password hashing for security
+- Created reusable database configuration
 
 #### Backend Development Progress
 - Successfully initialized Node.js project
@@ -106,6 +114,69 @@ A full-stack car-sharing web application built with React, Node.js, and MySQL, e
   - Error: EADDRINUSE (Address already in use) on port 5000
   - Solution: Changed server port to 5001 in environment configuration
   - Learning: Important to handle port conflicts in development environment
+
+#### Authentication System Setup
+- Planning user authentication implementation:
+  - User registration (signup)
+  - User login
+  - JWT token generation and validation
+  - Password encryption using bcrypt
+- Creating necessary files and folders:
+  ```
+  backend/src/
+  ├── routes/
+  │   └── authRoutes.js
+  ├── controllers/
+  │   └── authController.js
+  ├── middleware/
+  │   └── authMiddleware.js
+  ├── models/
+  │   └── userModel.js
+  └── config/
+      └── dbConfig.js
+  ```
+
+#### Next Implementation Steps:
+1. Create user model schema
+2. Implement registration endpoint
+3. Set up login authentication
+4. Add JWT token generation
+
+#### Database and User Model Implementation
+- Created database configuration with connection pooling
+- Implemented User model with:
+  - Secure password hashing using bcrypt
+  - User table schema design
+  - CRUD operations for user management
+- Added environment variables for database configuration
+- Implemented error handling for database operations
+
+#### Database Implementation Progress
+- Successfully connected to MySQL database
+- Created and initialized users table with required fields
+- Implemented database connection pooling for better performance
+- Resolved initial connection issues by properly configuring environment variables
+
+#### Technical Achievement:
+- Successfully implemented database schema for user management
+- Established secure database connection using environment variables
+- Verified table creation and database connectivity
+
+#### Implementation Evidence
+- Terminal Output Screenshots:
+  ```
+  Server is running on port 5001
+  Database connected successfully
+  Users table created successfully
+  Users table initialized
+  ```
+- Successfully resolved database connection issues
+- Verified table creation in MySQL Workbench
+
+#### Screenshots
+![Database Connection Success](./screenshots/database-connection-success.png)
+![MySQL Table Creation](./screenshots/mysql-table-creation.png)
+![Git Commit History](./screenshots/git-commit-history.png)
 
 ## Next Steps
 1. Set up the development environment
