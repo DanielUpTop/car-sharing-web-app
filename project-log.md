@@ -178,6 +178,23 @@ A full-stack car-sharing web application built with React, Node.js, and MySQL, e
 ![MySQL Table Creation](./screenshots/mysql-table-creation.png)
 ![Git Commit History](./screenshots/git-commit-history.png)
 
+#### Authentication Implementation Progress
+- Set up JWT-based authentication system
+- Implemented secure user authentication routes:
+  - Registration endpoint (/api/auth/register)
+  - Login endpoint (/api/auth/login)
+- Added security measures:
+  - Password hashing with bcrypt
+  - JWT token generation for session management
+  - Secure JWT secret configuration
+  - Email uniqueness validation
+
+#### Technical Decisions:
+- Used JWT for stateless authentication
+- Implemented token expiration (1 hour) for security
+- Return minimal user data in responses
+- Structured error responses for better client handling
+
 ## Next Steps
 1. Set up the development environment
 2. Initialize the React frontend
@@ -189,3 +206,35 @@ A full-stack car-sharing web application built with React, Node.js, and MySQL, e
 - Focus on mobile-responsive design
 - Maintain clean code architecture
 - Regular testing throughout development
+
+#### Frontend Development Initialization
+- Set up React application using Create React App with TypeScript
+- Installed essential frontend dependencies:
+  - axios: For HTTP requests to backend
+  - react-router-dom: For client-side routing
+  - Material-UI: For responsive design components
+- Planning component structure:
+  ```
+  frontend/
+  ├── src/
+  │   ├── components/
+  │   │   ├── auth/
+  │   │   │   ├── Login.tsx
+  │   │   │   └── Register.tsx
+  │   │   ├── layout/
+  │   │   │   ├── Navbar.tsx
+  │   │   │   └── Footer.tsx
+  │   │   └── common/
+  │   ├── services/
+  │   │   └── api.ts
+  │   ├── contexts/
+  │   │   └── AuthContext.tsx
+  │   └── types/
+  │       └── index.ts
+  ```
+
+#### Technical Decisions:
+- Used TypeScript for better type safety and development experience
+- Implemented Material-UI for consistent design system
+- Organized code with modular component structure
+- Planned for responsive design from the start
