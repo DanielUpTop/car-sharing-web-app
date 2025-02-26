@@ -56,30 +56,25 @@ const Bookings = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
+        const fetchBookings = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('http://localhost:5001/api/bookings', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (!response.ok) throw new Error('Failed to fetch bookings');
+                const data = await response.json();
+                setBookings(data);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'An error occurred');
+            } finally {
+                setIsLoading(false);
+            }
+        };
         fetchBookings();
     }, []);
-
-    const fetchBookings = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:5001/api/bookings', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to fetch bookings');
-            }
-
-            const data = await response.json();
-            setBookings(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     if (isLoading) {
         return (
@@ -99,7 +94,7 @@ const Bookings = () => {
 
     return (
         <>
-            <AppBar position="fixed">
+            <AppBar position="static">
                 <Toolbar>
                     <IconButton
                         edge="start"
@@ -114,7 +109,6 @@ const Bookings = () => {
                     </Typography>
                 </Toolbar>
             </AppBar>
-            <Toolbar />
 
             <Container maxWidth="lg" sx={{ mt: 4 }}>
                 <Paper sx={{ p: 2 }}>

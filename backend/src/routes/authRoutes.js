@@ -3,6 +3,7 @@ const router = express.Router();
 const User = require('../models/userModel');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const db = require('../config/dbConfig');
 
 // Registration route
 router.post('/register', async (req, res) => {
@@ -47,45 +48,42 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
+        const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
 
-        // Find user by email
-        const user = await User.findByEmail(email);
-        if (!user) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+        if (users.length === 0) {
+            return res.status(401).json({ message: 'Invalid email or password' });
         }
 
-        // Verify password
-        const isValidPassword = await bcrypt.compare(password, user.password);
-        if (!isValidPassword) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+        const user = users[0];
+        const validPassword = await bcrypt.compare(password, user.password);
+
+        if (!validPassword) {
+            return res.status(401).json({ message: 'Invalid email or password' });
         }
 
-        // Generate JWT token with the correct user ID
         const token = jwt.sign(
             { 
-                id: user.id,  // Make sure this matches what we check in bookingRoutes
-                email: user.email 
-            },
+                id: user.id,
+                email: user.email,
+                role: user.role 
+            }, 
             process.env.JWT_SECRET,
-            { expiresIn: '1h' }
+            { expiresIn: '24h' }
         );
 
-        // Log the token payload for debugging
-        console.log('Token payload:', { id: user.id, email: user.email });
-
         res.json({
-            message: 'Login successful',
             token,
             user: {
                 id: user.id,
                 email: user.email,
-                first_name: user.first_name,
-                last_name: user.last_name
+                firstName: user.first_name,
+                lastName: user.last_name,
+                role: user.role
             }
         });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ message: 'Error during login' });
+        res.status(500).json({ message: 'Error logging in' });
     }
 });
 

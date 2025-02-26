@@ -28,14 +28,14 @@ interface Car {
     id: number;
     make: string;
     model: string;
-    year: number;
-    registration_number: string;
+    type: string;
+    pricePerHour: number;
+    image: string;
     daily_rate: number;
-    location: string;
-    availability_status: string;
-    image_url: string;
-    average_rating: number;
-    total_ratings: number;
+    availability_status: 'available' | 'booked' | 'maintenance';
+    average_rating?: number;
+    total_ratings?: number;
+    location?: string;
 }
 
 const CarList = () => {
@@ -130,7 +130,7 @@ const CarList = () => {
                                 <CardMedia
                                     component="img"
                                     height="200"
-                                    image={car.image_url || 'https://via.placeholder.com/300x200?text=Car+Image'}
+                                    image={car.image || 'https://via.placeholder.com/300x200?text=Car+Image'}
                                     alt={`${car.make} ${car.model}`}
                                     sx={{ objectFit: 'cover' }}
                                 />
@@ -139,20 +139,13 @@ const CarList = () => {
                                         {car.make} {car.model}
                                     </Typography>
                                     <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-                                        {car.year}
+                                        {car.type}
                                     </Typography>
                                     
                                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                                         <LocationOnIcon sx={{ color: 'text.secondary', mr: 1 }} />
                                         <Typography variant="body2" color="text.secondary">
-                                            {car.location}
-                                        </Typography>
-                                    </Box>
-                                    
-                                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                        <AttachMoneyIcon sx={{ color: 'primary.main', mr: 1 }} />
-                                        <Typography variant="h6" color="primary">
-                                            £{car.daily_rate}/day
+                                            {car.type === 'hourly' ? `£${car.pricePerHour}/hour` : `£${car.daily_rate}/day`}
                                         </Typography>
                                     </Box>
 
@@ -166,8 +159,8 @@ const CarList = () => {
                                         }}
                                     >
                                         <RatingDisplay 
-                                            rating={car.average_rating} 
-                                            totalRatings={car.total_ratings}
+                                            rating={car.average_rating || 0}
+                                            totalRatings={car.total_ratings || 0}
                                         />
                                     </Box>
 
@@ -207,12 +200,18 @@ const CarList = () => {
 
             {selectedCar && (
                 <BookingDialog
-                    open={bookingDialogOpen}
+                    open={!!selectedCar}
                     onClose={() => {
-                        setBookingDialogOpen(false);
                         setSelectedCar(null);
                     }}
-                    car={selectedCar}
+                    car={{
+                        id: selectedCar.id,
+                        make: selectedCar.make,
+                        model: selectedCar.model,
+                        type: selectedCar.type,
+                        pricePerHour: selectedCar.pricePerHour || selectedCar.daily_rate / 24,
+                        image: selectedCar.image
+                    }}
                 />
             )}
 

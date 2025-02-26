@@ -11,9 +11,9 @@ import Register from './components/auth/Register'
 import Dashboard from './components/dashboard/Dashboard'
 import UserDashboard from './components/dashboard/UserDashboard'
 import ProtectedRoute from './components/auth/ProtectedRoute'
-import CarList from './components/cars/CarList'
-import Bookings from './components/bookings/Bookings'
 import Profile from './components/profile/Profile'
+import MapView from './components/map/MapView'
+import MyBookings from './components/bookings/MyBookings'
 
 function App() {
   return (
@@ -31,8 +31,8 @@ function App() {
               <ProtectedRoute>
                 <Routes>
                   <Route index element={<Dashboard />} />
-                  <Route path="cars" element={<CarList />} />
-                  <Route path="bookings" element={<Bookings />} />
+                  <Route path="cars" element={<MapView />} />
+                  <Route path="bookings" element={<MyBookings />} />
                   <Route path="profile" element={<Profile />} />
                   <Route path="stats" element={<UserDashboard />} />
                 </Routes>

@@ -24,7 +24,9 @@ interface BookingDialogProps {
         id: number;
         make: string;
         model: string;
-        daily_rate: number;
+        type: string;
+        pricePerHour: number;
+        image: string;
     };
 }
 
@@ -38,10 +40,23 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
 
     const calculateTotalPrice = () => {
         if (startDate && endDate) {
-            const days = differenceInDays(endDate, startDate) + 1;
-            return Number(car.daily_rate) * days;
+            const hours = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60));
+            return car.pricePerHour * hours;
         }
         return 0;
+    };
+
+    const formatDateForMySQL = (date: Date) => {
+        const pad = (num: number) => num.toString().padStart(2, '0');
+        
+        const year = date.getFullYear();
+        const month = pad(date.getMonth() + 1);
+        const day = pad(date.getDate());
+        const hours = pad(date.getHours());
+        const minutes = pad(date.getMinutes());
+        const seconds = pad(date.getSeconds());
+
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     };
 
     const handleSubmit = async () => {
@@ -55,23 +70,33 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
             return;
         }
 
+        const totalPrice = calculateTotalPrice();
+        if (totalPrice <= 0) {
+            setError('Invalid price calculation');
+            return;
+        }
+
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
+            if (!token) {
+                throw new Error('No authentication token found');
+            }
 
-            // Format dates to MySQL datetime format
-            const formatDateForMySQL = (date: Date) => {
-                return date.toISOString().slice(0, 19).replace('T', ' ');
-            };
+            const formattedStartDate = formatDateForMySQL(startDate);
+            const formattedEndDate = formatDateForMySQL(endDate);
 
             const bookingData = {
                 car_id: car.id,
-                start_date: formatDateForMySQL(startDate),
-                end_date: formatDateForMySQL(endDate),
-                total_price: calculateTotalPrice()
+                start_date: formattedStartDate,
+                end_date: formattedEndDate,
+                total_price: Number(totalPrice.toFixed(2))
             };
 
-            console.log('Booking data being sent:', bookingData);
+            console.log('Attempting to create booking with data:', {
+                ...bookingData,
+                token: token.substring(0, 10) + '...'
+            });
 
             const response = await fetch('http://localhost:5001/api/bookings', {
                 method: 'POST',
@@ -83,16 +108,16 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
             });
 
             const data = await response.json();
-            console.log('Response data:', data);
-
+            console.log('Server response:', data);
+            
             if (!response.ok) {
-                throw new Error(data.message || data.error || 'Failed to create booking');
+                throw new Error(data.error || data.message || 'Failed to create booking');
             }
 
             setShowSuccess(true);
             setTimeout(() => {
                 onClose();
-                navigate('/bookings');
+                navigate('/dashboard/bookings');
             }, 2000);
 
         } catch (err) {
@@ -175,14 +200,14 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
                             Booking Summary
                         </Typography>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography>Daily Rate:</Typography>
-                            <Typography>£{Number(car.daily_rate).toFixed(2)}</Typography>
+                            <Typography>Hourly Rate:</Typography>
+                            <Typography>£{Number(car.pricePerHour).toFixed(2)}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography>Total Days:</Typography>
+                            <Typography>Total Hours:</Typography>
                             <Typography>
                                 {startDate && endDate 
-                                    ? `${differenceInDays(endDate, startDate) + 1} days`
+                                    ? `${Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60))} hours`
                                     : '-'
                                 }
                             </Typography>
