@@ -1,3 +1,5 @@
+@import 'leaflet/dist/leaflet.css';
+
 /* Reset all default styles */
 * {
   margin: 0;
@@ -31,6 +33,3 @@ body {
   margin: 0;
   padding: 0;
 }
-
-/* Add these imports at the top of the file */
-@import 'leaflet/dist/leaflet.css';

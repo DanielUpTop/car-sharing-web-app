@@ -13,10 +13,12 @@ import {
 } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Visibility, VisibilityOff, Email, Lock } from '@mui/icons-material';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Login = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const { login } = useAuth();
     
     // Get the redirect path from location state, or default to dashboard
     const from = location.state?.from?.pathname || "/dashboard";
@@ -42,25 +44,47 @@ const Login = () => {
         setIsLoading(true);
 
         try {
+            console.log('Attempting login with:', formData.email);
+            
             const response = await fetch('http://localhost:5001/api/auth/login', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ email: formData.email, password: formData.password }),
+                body: JSON.stringify(formData)
             });
 
             const data = await response.json();
+            console.log('Login response data:', data);
+            console.log('Response status:', response.status);
 
             if (!response.ok) {
-                throw new Error(data.message || 'Login failed');
+                throw new Error(data.message || 'Failed to login');
             }
 
-            localStorage.setItem('token', data.token);
-            // Navigate to the attempted route or dashboard
-            navigate(from, { replace: true });
+            if (!data.token || !data.user) {
+                throw new Error('Invalid response format');
+            }
+
+            // Store auth data
+            console.log('Storing auth data:', {
+                token: data.token,
+                user: data.user
+            });
+            login(data.token, data.user);
+
+            // Navigate based on role
+            if (data.user.role === 'admin') {
+                console.log('User is admin, redirecting to /admin');
+                navigate('/admin');
+            } else {
+                console.log('User is not admin, redirecting to /dashboard');
+                navigate('/dashboard');
+            }
+
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
+            console.error('Login error:', err);
+            setError(err instanceof Error ? err.message : 'Failed to login');
         } finally {
             setIsLoading(false);
         }

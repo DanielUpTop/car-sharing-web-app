@@ -8,12 +8,14 @@ const authRoutes = require('./routes/authRoutes');
 const carRoutes = require('./routes/carRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 const userRoutes = require('./routes/userRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const adminBookingRoutes = require('./routes/adminBookingRoutes');
 
 const app = express();
 
 // Middleware
 app.use(cors({
-    origin: 'http://localhost:5173', // Your frontend URL
+    origin: ['http://localhost:5173', 'http://localhost:5174'], // Your frontend URLs
     credentials: true
 }));
 app.use(express.json());
@@ -27,6 +29,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/cars', carRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/admin/bookings', adminBookingRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

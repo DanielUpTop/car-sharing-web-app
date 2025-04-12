@@ -1,0 +1,14 @@
+<tr v-for="booking in bookings" :key="booking.id">
+  <td>{{ booking.customer }}</td>
+  <td>{{ booking.car }}</td>
+  <td>{{ formatDate(booking.startDate) }}</td>
+  <td>{{ formatDate(booking.endDate) }}</td>
+  <td>{{ formatPrice(booking.totalPrice) }}</td>
+  <td>{{ booking.status }}</td>
+  <td>{{ formatDate(booking.bookedOn) }}</td>
+  <td>
+    <button @click="viewBooking(booking)">
+      <span class="icon">👁️</span>
+    </button>
+  </td>
+</tr> 
