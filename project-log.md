@@ -238,3 +238,42 @@ A full-stack car-sharing web application built with React, Node.js, and MySQL, e
 - Implemented Material-UI for consistent design system
 - Organized code with modular component structure
 - Planned for responsive design from the start
+
+### April 13, 2024
+#### Email Confirmation System Improvements
+- Enhanced booking confirmation email system:
+  - Fixed return date display in confirmation emails
+  - Improved booking workflow by moving email confirmation to admin approval
+  - Enhanced error handling and logging in email service
+  - Updated template parameters to match EmailJS template
+
+#### Technical Implementation:
+- Modified `emailService.ts`:
+  - Improved date handling for start and end dates
+  - Added validation for email parameters
+  - Enhanced error logging and debugging
+  - Fixed total price formatting issues
+- Updated `BookingDialog.tsx`:
+  - Removed immediate email sending on booking creation
+  - Streamlined booking process
+  - Improved user feedback
+
+#### Challenges Resolved:
+1. Return Date Display:
+   - Fixed missing return date in confirmation emails
+   - Implemented proper date string parsing
+   - Added fallback handling for missing dates
+
+2. Email Workflow:
+   - Eliminated duplicate emails by removing send from booking creation
+   - Centralized email sending to admin confirmation only
+   - Improved user experience with clearer status updates
+
+3. Technical Issues:
+   - Resolved price formatting with proper number conversion
+   - Enhanced error handling with detailed logging
+   - Fixed template parameter mapping
+
+#### Commit Details:
+- Hash: d1f1ba0e
+- Message: "Improve booking confirmation email system: Fix return date display, move email sending to admin approval only, improve error handling"
