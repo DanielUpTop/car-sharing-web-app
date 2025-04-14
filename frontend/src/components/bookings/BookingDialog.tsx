@@ -16,6 +16,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { differenceInDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import MuiAlert from '@mui/material/Alert';
+import { sendBookingConfirmationEmail } from '../../services/emailService';
 
 interface BookingDialogProps {
     open: boolean;
