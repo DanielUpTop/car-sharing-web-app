@@ -135,7 +135,11 @@ router.get('/bookings', async (req, res) => {
                 u.email,
                 c.make,
                 c.model,
-                c.registration_number
+                c.registration_number,
+                c.address,
+                c.location,
+                c.latitude,
+                c.longitude
             FROM bookings b
             JOIN users u ON b.user_id = u.id
             JOIN cars c ON b.car_id = c.id
@@ -165,7 +169,8 @@ router.get('/bookings', async (req, res) => {
             car: {
                 make: booking.make,
                 model: booking.model,
-                registration_number: booking.registration_number
+                registration_number: booking.registration_number,
+                address: booking.address || booking.location || `${booking.latitude}, ${booking.longitude}` || 'No location set for this vehicle'
             }
         }));
 
@@ -727,33 +732,48 @@ router.put('/bookings/:id/status', async (req, res) => {
 // Get booking details with user and car info
 router.get('/bookings/:id', async (req, res) => {
     try {
-        const [bookings] = await db.query(`
+        const [booking] = await db.query(`
             SELECT 
                 b.*,
-                u.first_name, u.last_name, u.email,
-                c.make, c.model, c.registration_number
+                u.first_name,
+                u.last_name,
+                u.email,
+                c.make,
+                c.model,
+                c.registration_number,
+                c.address,
+                c.location,
+                c.latitude,
+                c.longitude
             FROM bookings b
             JOIN users u ON b.user_id = u.id
             JOIN cars c ON b.car_id = c.id
             WHERE b.id = ?
         `, [req.params.id]);
 
-        if (bookings.length === 0) {
+        if (booking.length === 0) {
             return res.status(404).json({ message: 'Booking not found' });
         }
 
-        // Format the data to match the frontend expectations
         const formattedBooking = {
-            ...bookings[0],
+            id: booking[0].id,
+            user_id: booking[0].user_id,
+            car_id: booking[0].car_id,
+            start_date: booking[0].start_date,
+            end_date: booking[0].end_date,
+            status: booking[0].status,
+            total_price: booking[0].total_price,
+            created_at: booking[0].created_at,
             user: {
-                first_name: bookings[0].first_name,
-                last_name: bookings[0].last_name,
-                email: bookings[0].email
+                first_name: booking[0].first_name,
+                last_name: booking[0].last_name,
+                email: booking[0].email
             },
             car: {
-                make: bookings[0].make,
-                model: bookings[0].model,
-                registration_number: bookings[0].registration_number
+                make: booking[0].make,
+                model: booking[0].model,
+                registration_number: booking[0].registration_number,
+                address: booking[0].address || booking[0].location || `${booking[0].latitude}, ${booking[0].longitude}` || 'No location set for this vehicle'
             }
         };
 

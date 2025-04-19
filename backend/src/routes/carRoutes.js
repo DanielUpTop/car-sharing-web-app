@@ -20,6 +20,8 @@ router.get('/available', async (req, res) => {
     try {
         const query = `
             SELECT c.*, 
+                   c.address,
+                   c.location,
                    COALESCE(b.status, 'none') as booking_status
             FROM cars c
             LEFT JOIN bookings b ON c.id = b.car_id 
@@ -29,7 +31,14 @@ router.get('/available', async (req, res) => {
             AND (b.id IS NULL OR b.status = 'cancelled')
         `;
         const [cars] = await db.query(query);
-        res.json(cars);
+        
+        // Process cars to ensure address is properly set
+        const processedCars = cars.map(car => ({
+            ...car,
+            address: car.address || car.location || 'No location set for this vehicle'
+        }));
+        
+        res.json(processedCars);
     } catch (error) {
         console.error('Error fetching available cars:', error);
         res.status(500).json({ message: 'Error fetching available cars' });

@@ -6,6 +6,8 @@ const db = require('../config/dbConfig');
 
 // Create a new booking
 router.post('/', authenticateToken, async (req, res) => {
+    const connection = await db.getConnection();
+    
     try {
         const { car_id, start_date, end_date, total_price } = req.body;
         const user_id = req.user.id;
@@ -18,9 +20,12 @@ router.post('/', authenticateToken, async (req, res) => {
             user_id
         });
 
+        await connection.beginTransaction();
+
         // First, verify the user exists
-        const [user] = await db.query('SELECT id FROM users WHERE id = ?', [user_id]);
+        const [user] = await connection.query('SELECT id FROM users WHERE id = ?', [user_id]);
         if (!user.length) {
+            await connection.rollback();
             return res.status(401).json({
                 message: 'User not found',
                 error: 'Invalid user ID'
@@ -29,13 +34,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
         // Validate required fields
         if (!car_id || !start_date || !end_date || !total_price || !user_id) {
-            console.log('Missing required fields:', {
-                car_id: !!car_id,
-                start_date: !!start_date,
-                end_date: !!end_date,
-                total_price: !!total_price,
-                user_id: !!user_id
-            });
+            await connection.rollback();
             return res.status(400).json({
                 message: 'Missing required fields',
                 error: 'All fields are required',
@@ -43,54 +42,77 @@ router.post('/', authenticateToken, async (req, res) => {
             });
         }
 
-        // Validate car exists
-        const [car] = await db.query('SELECT * FROM cars WHERE id = ?', [car_id]);
+        // Check if car exists and is available (with row lock)
+        const [car] = await connection.query(
+            'SELECT * FROM cars WHERE id = ? FOR UPDATE',
+            [car_id]
+        );
+
         if (!car.length) {
+            await connection.rollback();
             return res.status(404).json({
                 message: 'Car not found',
                 error: 'Invalid car_id'
             });
         }
 
-        // Check if car is still available
         if (car[0].availability_status !== 'available') {
+            await connection.rollback();
             return res.status(400).json({
-                message: 'Car is no longer available',
-                error: 'Car has been booked by someone else'
+                message: 'Car has been booked by someone else',
+                error: 'Car is not available'
+            });
+        }
+
+        // Check for overlapping bookings
+        const [overlappingBookings] = await connection.query(
+            `SELECT * FROM bookings 
+             WHERE car_id = ? 
+             AND status != 'cancelled'
+             AND ((start_date BETWEEN ? AND ?) 
+             OR (end_date BETWEEN ? AND ?)
+             OR (start_date <= ? AND end_date >= ?))`,
+            [car_id, start_date, end_date, start_date, end_date, start_date, end_date]
+        );
+
+        if (overlappingBookings.length > 0) {
+            await connection.rollback();
+            return res.status(400).json({
+                message: 'Car is not available for the selected time period',
+                error: 'Booking time conflict'
             });
         }
 
         // Create the booking
-        try {
-            const [result] = await db.query(
-                `INSERT INTO bookings (user_id, car_id, start_date, end_date, total_price, status) 
-                 VALUES (?, ?, ?, ?, ?, 'pending')`,
-                [user_id, car_id, start_date, end_date, total_price]
-            );
+        const [result] = await connection.query(
+            `INSERT INTO bookings (user_id, car_id, start_date, end_date, total_price, status) 
+             VALUES (?, ?, ?, ?, ?, 'pending')`,
+            [user_id, car_id, start_date, end_date, total_price]
+        );
 
-            // Update car availability
-            await db.query(
-                'UPDATE cars SET availability_status = ? WHERE id = ?',
-                ['booked', car_id]
-            );
+        // Update car availability
+        await connection.query(
+            'UPDATE cars SET availability_status = ? WHERE id = ?',
+            ['booked', car_id]
+        );
 
-            console.log('Booking created successfully:', result.insertId);
+        await connection.commit();
+        console.log('Booking created successfully:', result.insertId);
 
-            res.status(201).json({
-                message: 'Booking created successfully',
-                bookingId: result.insertId
-            });
-        } catch (dbError) {
-            console.error('Database error:', dbError);
-            throw new Error(`Database error: ${dbError.message}`);
-        }
+        res.status(201).json({
+            message: 'Booking created successfully',
+            bookingId: result.insertId
+        });
 
     } catch (error) {
+        await connection.rollback();
         console.error('Error creating booking:', error);
         res.status(500).json({
             message: 'Error creating booking',
             error: error.message
         });
+    } finally {
+        connection.release();
     }
 });
 

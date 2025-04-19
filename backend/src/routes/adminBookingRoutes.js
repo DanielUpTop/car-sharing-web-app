@@ -28,7 +28,11 @@ router.get('/', async (req, res) => {
                 u.email,
                 c.make,
                 c.model,
-                c.registration_number
+                c.registration_number,
+                c.address,
+                c.location,
+                c.latitude,
+                c.longitude
             FROM bookings b
             JOIN users u ON b.user_id = u.id
             JOIN cars c ON b.car_id = c.id
@@ -55,7 +59,8 @@ router.get('/', async (req, res) => {
             car: {
                 make: booking.make,
                 model: booking.model,
-                registration_number: booking.registration_number
+                registration_number: booking.registration_number,
+                address: booking.address || booking.location || `${booking.latitude}, ${booking.longitude}`
             }
         }));
 
@@ -73,10 +78,16 @@ router.get('/bookings/:id', async (req, res) => {
         const [booking] = await db.query(`
             SELECT 
                 b.*,
-                CONCAT(u.first_name, ' ', u.last_name) as user_name,
-                u.email as user_email,
-                c.make, c.model, c.registration_number,
-                c.daily_rate, c.price_per_hour
+                u.first_name,
+                u.last_name,
+                u.email,
+                c.make,
+                c.model,
+                c.registration_number,
+                c.address,
+                c.location,
+                c.latitude,
+                c.longitude
             FROM bookings b
             JOIN users u ON b.user_id = u.id
             JOIN cars c ON b.car_id = c.id
@@ -87,7 +98,35 @@ router.get('/bookings/:id', async (req, res) => {
             return res.status(404).json({ message: 'Booking not found' });
         }
 
-        res.json(booking[0]);
+        // Format the data to match the frontend expectations
+        const formattedBooking = {
+            ...booking[0],
+            user: {
+                first_name: booking[0].first_name,
+                last_name: booking[0].last_name,
+                email: booking[0].email
+            },
+            car: {
+                make: booking[0].make,
+                model: booking[0].model,
+                registration_number: booking[0].registration_number,
+                address: booking[0].address || booking[0].location || `${booking[0].latitude}, ${booking[0].longitude}`
+            }
+        };
+
+        // Remove duplicate fields
+        delete formattedBooking.first_name;
+        delete formattedBooking.last_name;
+        delete formattedBooking.email;
+        delete formattedBooking.make;
+        delete formattedBooking.model;
+        delete formattedBooking.registration_number;
+        delete formattedBooking.address;
+        delete formattedBooking.location;
+        delete formattedBooking.latitude;
+        delete formattedBooking.longitude;
+
+        res.json(formattedBooking);
     } catch (error) {
         console.error('Error fetching booking details:', error);
         res.status(500).json({ message: 'Error fetching booking details' });
@@ -122,8 +161,16 @@ router.get('/bookings/filter/:status', async (req, res) => {
         let query = `
             SELECT 
                 b.*,
-                CONCAT(u.first_name, ' ', u.last_name) as user_name,
-                CONCAT(c.make, ' ', c.model, ' (', c.registration_number, ')') as car_details
+                u.first_name,
+                u.last_name,
+                u.email,
+                c.make,
+                c.model,
+                c.registration_number,
+                c.address,
+                c.location,
+                c.latitude,
+                c.longitude
             FROM bookings b
             JOIN users u ON b.user_id = u.id
             JOIN cars c ON b.car_id = c.id
@@ -140,52 +187,46 @@ router.get('/bookings/filter/:status', async (req, res) => {
             status !== 'all' ? [status] : []
         );
 
-        res.json(bookings);
-    } catch (error) {
-        console.error('Error fetching filtered bookings:', error);
-        res.status(500).json({ message: 'Error fetching bookings' });
-    }
-});
+        // Debug log to see what we're getting from the database
+        console.log('Raw booking data:', JSON.stringify(bookings[0], null, 2));
 
-// Get all bookings with details
-router.get('/bookings', async (req, res) => {
-    try {
-        const query = `
-            SELECT 
-                b.*,
-                u.first_name, u.last_name, u.email,
-                c.make, c.model, c.registration_number
-            FROM bookings b
-            JOIN users u ON b.user_id = u.id
-            JOIN cars c ON b.car_id = c.id
-            ORDER BY b.created_at DESC
-        `;
-        
-        const [bookings] = await db.query(query);
-        
-        const formattedBookings = bookings.map(booking => ({
-            id: booking.id,
-            user_id: booking.user_id,
-            car_id: booking.car_id,
-            start_date: booking.start_date,
-            end_date: booking.end_date,
-            status: booking.status,
-            total_price: booking.total_price,
-            user: {
-                first_name: booking.first_name,
-                last_name: booking.last_name,
-                email: booking.email
-            },
-            car: {
-                make: booking.make,
-                model: booking.model,
-                registration_number: booking.registration_number
-            }
-        }));
+        const formattedBookings = bookings.map(booking => {
+            // Debug log for each booking's address data
+            console.log('Car address data:', {
+                address: booking.address,
+                location: booking.location,
+                latitude: booking.latitude,
+                longitude: booking.longitude
+            });
+
+            return {
+                id: booking.id,
+                user_id: booking.user_id,
+                car_id: booking.car_id,
+                start_date: booking.start_date,
+                end_date: booking.end_date,
+                status: booking.status,
+                total_price: booking.total_price,
+                user: {
+                    first_name: booking.first_name,
+                    last_name: booking.last_name,
+                    email: booking.email
+                },
+                car: {
+                    make: booking.make,
+                    model: booking.model,
+                    registration_number: booking.registration_number,
+                    address: booking.address || booking.location || `${booking.latitude}, ${booking.longitude}`
+                }
+            };
+        });
+
+        // Debug log to see what we're sending to frontend
+        console.log('Formatted booking data:', JSON.stringify(formattedBookings[0], null, 2));
 
         res.json(formattedBookings);
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Error fetching filtered bookings:', error);
         res.status(500).json({ message: 'Error fetching bookings' });
     }
 });

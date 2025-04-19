@@ -34,7 +34,8 @@ router.post('/cars', async (req, res) => {
             price_per_hour,
             type,
             seats,
-            availability_status
+            availability_status,
+            address
         } = req.body;
 
         const [result] = await db.query(`
@@ -47,8 +48,9 @@ router.post('/cars', async (req, res) => {
                 price_per_hour,
                 type,
                 seats,
-                availability_status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                availability_status,
+                address
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             make,
             model,
@@ -58,7 +60,8 @@ router.post('/cars', async (req, res) => {
             price_per_hour,
             type,
             seats,
-            availability_status
+            availability_status,
+            address
         ]);
 
         const [newCar] = await db.query('SELECT * FROM cars WHERE id = ?', [result.insertId]);
@@ -82,7 +85,8 @@ router.put('/cars/:id', async (req, res) => {
             price_per_hour,
             type,
             seats,
-            availability_status
+            availability_status,
+            address
         } = req.body;
 
         await db.query(`
@@ -95,7 +99,8 @@ router.put('/cars/:id', async (req, res) => {
                 price_per_hour = ?,
                 type = ?,
                 seats = ?,
-                availability_status = ?
+                availability_status = ?,
+                address = ?
             WHERE id = ?
         `, [
             make,
@@ -107,6 +112,7 @@ router.put('/cars/:id', async (req, res) => {
             type,
             seats,
             availability_status,
+            address,
             id
         ]);
 
