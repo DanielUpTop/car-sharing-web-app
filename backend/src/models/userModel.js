@@ -12,6 +12,10 @@ class User {
                 password VARCHAR(255) NOT NULL,
                 phone_number VARCHAR(15),
                 driving_license VARCHAR(50),
+                role ENUM('admin', 'rentee') DEFAULT 'rentee',
+                status ENUM('active', 'inactive', 'suspended') DEFAULT 'active',
+                is_verified BOOLEAN DEFAULT FALSE,
+                verification_token VARCHAR(255),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
@@ -26,13 +30,22 @@ class User {
         }
     }
 
-    static async create({ first_name, last_name, email, password, phone_number, driving_license }) {
+    static async create({ first_name, last_name, email, password, phone_number, driving_license, verification_token, is_verified = false }) {
         // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const query = `
-            INSERT INTO users (first_name, last_name, email, password, phone_number, driving_license)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO users (
+                first_name, 
+                last_name, 
+                email, 
+                password, 
+                phone_number, 
+                driving_license,
+                verification_token,
+                is_verified
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `;
         
         try {
@@ -42,7 +55,9 @@ class User {
                 email,
                 hashedPassword,
                 phone_number,
-                driving_license
+                driving_license,
+                verification_token,
+                is_verified
             ]);
             return result.insertId;
         } catch (error) {
@@ -58,6 +73,32 @@ class User {
             return rows[0];
         } catch (error) {
             console.error('Error finding user:', error);
+            throw error;
+        }
+    }
+
+    static async findByVerificationToken(token) {
+        const query = 'SELECT * FROM users WHERE verification_token = ?';
+        try {
+            const [rows] = await db.query(query, [token]);
+            return rows[0];
+        } catch (error) {
+            console.error('Error finding user by verification token:', error);
+            throw error;
+        }
+    }
+
+    static async verifyEmail(userId) {
+        const query = `
+            UPDATE users 
+            SET is_verified = true, verification_token = NULL 
+            WHERE id = ?
+        `;
+        try {
+            await db.query(query, [userId]);
+            return true;
+        } catch (error) {
+            console.error('Error verifying email:', error);
             throw error;
         }
     }
