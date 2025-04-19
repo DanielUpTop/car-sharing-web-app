@@ -10,6 +10,7 @@ import './App.css'
 import HomePage from './components/home/HomePage'
 import Login from './components/auth/Login'
 import Register from './components/auth/Register'
+import VerifyEmail from './components/auth/VerifyEmail'
 import Dashboard from './components/dashboard/Dashboard'
 import UserDashboard from './components/dashboard/UserDashboard'
 import ProtectedRoute from './components/auth/ProtectedRoute'
@@ -39,6 +40,7 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
 
               {/* User routes */}
               <Route path="/dashboard/*" element={

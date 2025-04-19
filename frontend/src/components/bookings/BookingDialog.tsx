@@ -18,17 +18,20 @@ import { useNavigate } from 'react-router-dom';
 import MuiAlert from '@mui/material/Alert';
 import { sendBookingConfirmationEmail } from '../../services/emailService';
 
+interface Car {
+    id: number;
+    make: string;
+    model: string;
+    type: string;
+    pricePerHour: number;
+    image: string;
+    address: string;
+}
+
 interface BookingDialogProps {
     open: boolean;
     onClose: () => void;
-    car: {
-        id: number;
-        make: string;
-        model: string;
-        type: string;
-        pricePerHour: number;
-        image: string;
-    };
+    car: Car;
 }
 
 const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
@@ -115,6 +118,7 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
                 throw new Error(data.error || data.message || 'Failed to create booking');
             }
 
+            // Remove email sending from here since it should only happen after admin approval
             setShowSuccess(true);
             setTimeout(() => {
                 onClose();
@@ -129,6 +133,25 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
         }
     };
 
+    const renderCarDetails = () => {
+        console.log('Car details in dialog:', car); // Debug log
+        return (
+            <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                    <strong>Car:</strong> {car.make} {car.model}
+                </Typography>
+                <Typography variant="subtitle1" gutterBottom>
+                    <strong>Pick-up Location:</strong> {car.address || 'No location set for this vehicle'}
+                </Typography>
+                {!car.address && (
+                    <Alert severity="warning" sx={{ mt: 1 }}>
+                        This vehicle's location has not been set. Please contact support for assistance.
+                    </Alert>
+                )}
+            </Box>
+        );
+    };
+
     return (
         <>
             <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -141,6 +164,7 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
                             {error}
                         </Alert>
                     )}
+                    {renderCarDetails()}
                     <LocalizationProvider dateAdapter={AdapterDateFns}>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                             <DateTimePicker

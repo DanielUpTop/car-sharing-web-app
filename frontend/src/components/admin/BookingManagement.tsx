@@ -18,12 +18,7 @@ import {
     TableCell,
     TableRow,
 } from '@mui/material';
-import {
-    DataGrid,
-    GridColDef,
-    GridRenderCellParams,
-    GridValueGetterParams
-} from '@mui/x-data-grid';
+import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import {
     Visibility as ViewIcon,
     Cancel as CancelIcon,
@@ -32,31 +27,40 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
+import { sendBookingConfirmationEmail } from '../../services/emailService';
 
 interface Booking {
     id: number;
-    user_id: number;
-    car_id: number;
     user: {
         first_name: string;
         last_name: string;
         email: string;
     };
+    user_name: string;
+    user_email: string;
+    car_details: string;
+    start_date: string;
+    end_date: string;
+    total_price: number;
+    status: string;
+    created_at: string;
     car: {
         make: string;
         model: string;
         registration_number: string;
+        address: string;
     };
-    start_date: string;
-    end_date: string;
-    total_price: string | number;
-    status: string;
-    created_at: string;
 }
 
 interface BookingDetails extends Booking {
     payment_status?: string;
     notes?: string;
+}
+
+interface SnackbarState {
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'warning' | 'info';
 }
 
 const BookingManagement = () => {
@@ -65,7 +69,7 @@ const BookingManagement = () => {
     const [loading, setLoading] = useState(true);
     const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
     const [openDialog, setOpenDialog] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
+    const [snackbar, setSnackbar] = useState<SnackbarState>({ open: false, message: '', severity: 'success' });
 
     const columns: GridColDef[] = [
         {
@@ -84,6 +88,15 @@ const BookingManagement = () => {
             renderCell: (params) => {
                 const car = params.row?.car;
                 return car ? `${car.make} ${car.model} (${car.registration_number})` : '';
+            }
+        },
+        {
+            field: 'car_address',
+            headerName: 'Pick-up Location',
+            width: 250,
+            renderCell: (params) => {
+                const car = params.row?.car;
+                return car?.address || 'No location set';
             }
         },
         {
@@ -231,14 +244,46 @@ const BookingManagement = () => {
             const response = await fetch(`http://localhost:5001/api/admin/bookings/${bookingId}/status`, {
                 method: 'PUT',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({ status: newStatus })
             });
 
             if (!response.ok) {
-                throw new Error('Failed to update booking status');
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to update booking status');
+            }
+
+            // If booking is confirmed, send confirmation email
+            if (newStatus === 'confirmed') {
+                try {
+                    const selectedBooking = bookings.find(booking => booking.id === bookingId);
+                    if (!selectedBooking) {
+                        throw new Error('Booking not found');
+                    }
+
+                    await sendBookingConfirmationEmail({
+                        to_name: `${selectedBooking.user.first_name} ${selectedBooking.user.last_name}`,
+                        to_email: selectedBooking.user.email,
+                        verification_link: '',
+                        car_details: {
+                            make: selectedBooking.car.make,
+                            model: selectedBooking.car.model,
+                            booking_date: `${format(new Date(selectedBooking.start_date), 'PPP p')} - ${format(new Date(selectedBooking.end_date), 'PPP p')}`,
+                            total_price: Number(selectedBooking.total_price),
+                            address: selectedBooking.car.address
+                        }
+                    });
+                    console.log('Confirmation email sent successfully');
+                } catch (emailError) {
+                    console.error('Failed to send confirmation email:', emailError);
+                    setSnackbar({
+                        open: true,
+                        message: 'Booking approved but failed to send confirmation email',
+                        severity: 'warning'
+                    });
+                }
             }
 
             // Update the bookings list
@@ -255,7 +300,7 @@ const BookingManagement = () => {
             console.error('Error updating booking status:', error);
             setSnackbar({
                 open: true,
-                message: 'Failed to update booking status',
+                message: error instanceof Error ? error.message : 'Failed to update booking status',
                 severity: 'error'
             });
         }
@@ -274,15 +319,15 @@ const BookingManagement = () => {
             <DataGrid
                 rows={bookings}
                 columns={columns}
-                pageSize={10}
-                rowsPerPageOptions={[10]}
-                disableSelectionOnClick
+                paginationModel={{ pageSize: 10, page: 0 }}
+                pageSizeOptions={[10, 25, 50]}
+                disableRowSelectionOnClick
                 autoHeight
                 loading={loading}
                 sx={{
                     backgroundColor: 'white',
                     '& .MuiDataGrid-cell': {
-                        borderBottom: '1px solid #f0f0f0'
+                        borderBottom: '1px solid #E0E0E0'
                     }
                 }}
             />
@@ -307,7 +352,9 @@ const BookingManagement = () => {
                                                 Customer Name
                                             </TableCell>
                                             <TableCell>
-                                                {`${selectedBooking.user.first_name} ${selectedBooking.user.last_name}`}
+                                                <Typography variant="body2">
+                                                    {`${selectedBooking.user.first_name} ${selectedBooking.user.last_name}`}
+                                                </Typography>
                                             </TableCell>
                                         </TableRow>
                                         <TableRow>
@@ -315,7 +362,9 @@ const BookingManagement = () => {
                                                 Customer Email
                                             </TableCell>
                                             <TableCell>
-                                                {selectedBooking.user.email}
+                                                <Typography variant="body2">
+                                                    {selectedBooking.user.email}
+                                                </Typography>
                                             </TableCell>
                                         </TableRow>
                                         <TableRow>
@@ -324,6 +373,16 @@ const BookingManagement = () => {
                                             </TableCell>
                                             <TableCell>
                                                 {`${selectedBooking.car.make} ${selectedBooking.car.model} (${selectedBooking.car.registration_number})`}
+                                            </TableCell>
+                                        </TableRow>
+                                        <TableRow>
+                                            <TableCell component="th" sx={{ fontWeight: 'bold' }}>
+                                                Pick-up Location
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" color={selectedBooking.car.address ? 'textPrimary' : 'error'}>
+                                                    {selectedBooking.car.address || 'No location set for this vehicle'}
+                                                </Typography>
                                             </TableCell>
                                         </TableRow>
                                         <TableRow>

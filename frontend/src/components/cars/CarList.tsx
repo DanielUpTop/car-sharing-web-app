@@ -14,12 +14,21 @@ import {
     IconButton,
     Paper,
     Chip,
-    Rating
+    Rating,
+    TextField,
+    InputAdornment,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    Slider,
+    Stack
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import SearchIcon from '@mui/icons-material/Search';
 import BookingDialog from '../bookings/BookingDialog';
 import RatingDisplay from '../common/RatingDisplay';
 import CarRatings from './CarRatings';
@@ -36,10 +45,12 @@ interface Car {
     average_rating?: number;
     total_ratings?: number;
     location?: string;
+    address?: string;
 }
 
 const CarList = () => {
     const [cars, setCars] = useState<Car[]>([]);
+    const [filteredCars, setFilteredCars] = useState<Car[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const navigate = useNavigate();
@@ -47,10 +58,20 @@ const CarList = () => {
     const [bookingDialogOpen, setBookingDialogOpen] = useState(false);
     const [ratingsDialogOpen, setRatingsDialogOpen] = useState(false);
     const [selectedCarForRatings, setSelectedCarForRatings] = useState<Car | null>(null);
+    
+    // Search and filter states
+    const [searchTerm, setSearchTerm] = useState('');
+    const [priceRange, setPriceRange] = useState<[number, number]>([0, 100]);
+    const [selectedType, setSelectedType] = useState<string>('all');
+    const [selectedAvailability, setSelectedAvailability] = useState<string>('all');
 
     useEffect(() => {
         fetchCars();
     }, []);
+
+    useEffect(() => {
+        filterCars();
+    }, [cars, searchTerm, priceRange, selectedType, selectedAvailability]);
 
     const fetchCars = async () => {
         try {
@@ -61,12 +82,63 @@ const CarList = () => {
                 throw new Error(data.message || 'Failed to fetch cars');
             }
             
-            setCars(data);
+            console.log('Fetched cars data:', data); // Debug log
+            
+            // Process the cars data to ensure address is properly set
+            const processedCars = data.map((car: Car) => {
+                console.log(`Processing car ${car.make} ${car.model}:`, {
+                    address: car.address,
+                    location: car.location
+                }); // Debug log
+                return {
+                    ...car,
+                    address: car.address || car.location
+                };
+            });
+            
+            console.log('Processed cars:', processedCars); // Debug log
+            setCars(processedCars);
+            setFilteredCars(processedCars);
         } catch (error) {
+            console.error('Error fetching cars:', error);
             setError(error instanceof Error ? error.message : 'An error occurred');
         } finally {
             setLoading(false);
         }
+    };
+
+    const filterCars = () => {
+        let filtered = [...cars];
+
+        // Search by make or model
+        if (searchTerm) {
+            filtered = filtered.filter(car => 
+                car.make.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                car.model.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
+
+        // Filter by price range
+        filtered = filtered.filter(car => {
+            const price = car.type === 'hourly' ? car.pricePerHour : car.daily_rate;
+            return price >= priceRange[0] && price <= priceRange[1];
+        });
+
+        // Filter by type
+        if (selectedType !== 'all') {
+            filtered = filtered.filter(car => car.type === selectedType);
+        }
+
+        // Filter by availability
+        if (selectedAvailability !== 'all') {
+            filtered = filtered.filter(car => car.availability_status === selectedAvailability);
+        }
+
+        setFilteredCars(filtered);
+    };
+
+    const handlePriceRangeChange = (event: Event, newValue: number | number[]) => {
+        setPriceRange(newValue as [number, number]);
     };
 
     if (loading) {
@@ -109,13 +181,75 @@ const CarList = () => {
                     <Typography variant="h4" gutterBottom color="primary">
                         Our Fleet
                     </Typography>
-                    <Typography variant="body1" color="text.secondary">
+                    <Typography variant="body1" color="text.secondary" gutterBottom>
                         Choose from our selection of quality vehicles available for rent.
                     </Typography>
+
+                    <Stack spacing={3} sx={{ mt: 2 }}>
+                        <TextField
+                            fullWidth
+                            variant="outlined"
+                            placeholder="Search by make or model..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <SearchIcon />
+                                    </InputAdornment>
+                                ),
+                            }}
+                        />
+
+                        <Box>
+                            <Typography gutterBottom>Price Range</Typography>
+                            <Slider
+                                value={priceRange}
+                                onChange={handlePriceRangeChange}
+                                valueLabelDisplay="auto"
+                                min={0}
+                                max={100}
+                                step={5}
+                            />
+                            <Box display="flex" justifyContent="space-between">
+                                <Typography variant="body2">£{priceRange[0]}</Typography>
+                                <Typography variant="body2">£{priceRange[1]}</Typography>
+                            </Box>
+                        </Box>
+
+                        <Box display="flex" gap={2}>
+                            <FormControl fullWidth>
+                                <InputLabel>Car Type</InputLabel>
+                                <Select
+                                    value={selectedType}
+                                    label="Car Type"
+                                    onChange={(e) => setSelectedType(e.target.value)}
+                                >
+                                    <MenuItem value="all">All Types</MenuItem>
+                                    <MenuItem value="hourly">Hourly</MenuItem>
+                                    <MenuItem value="daily">Daily</MenuItem>
+                                </Select>
+                            </FormControl>
+
+                            <FormControl fullWidth>
+                                <InputLabel>Availability</InputLabel>
+                                <Select
+                                    value={selectedAvailability}
+                                    label="Availability"
+                                    onChange={(e) => setSelectedAvailability(e.target.value)}
+                                >
+                                    <MenuItem value="all">All</MenuItem>
+                                    <MenuItem value="available">Available</MenuItem>
+                                    <MenuItem value="booked">Booked</MenuItem>
+                                    <MenuItem value="maintenance">Maintenance</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Box>
+                    </Stack>
                 </Paper>
 
                 <Grid container spacing={4}>
-                    {cars.map((car) => (
+                    {filteredCars.map((car) => (
                         <Grid item xs={12} sm={6} md={4} key={car.id}>
                             <Card sx={{ 
                                 height: '100%', 
@@ -145,9 +279,13 @@ const CarList = () => {
                                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                                         <LocationOnIcon sx={{ color: 'text.secondary', mr: 1 }} />
                                         <Typography variant="body2" color="text.secondary">
-                                            {car.type === 'hourly' ? `£${car.pricePerHour}/hour` : `£${car.daily_rate}/day`}
+                                            {car.address || car.location || 'Location will be provided upon booking'}
                                         </Typography>
                                     </Box>
+
+                                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                                        {car.type === 'hourly' ? `£${car.pricePerHour}/hour` : `£${car.daily_rate}/day`}
+                                    </Typography>
 
                                     <Box 
                                         sx={{ mb: 2, cursor: 'pointer' }} 
@@ -200,17 +338,19 @@ const CarList = () => {
 
             {selectedCar && (
                 <BookingDialog
-                    open={!!selectedCar}
+                    open={bookingDialogOpen}
                     onClose={() => {
                         setSelectedCar(null);
+                        setBookingDialogOpen(false);
                     }}
                     car={{
                         id: selectedCar.id,
                         make: selectedCar.make,
                         model: selectedCar.model,
                         type: selectedCar.type,
-                        pricePerHour: selectedCar.pricePerHour || selectedCar.daily_rate / 24,
-                        image: selectedCar.image
+                        pricePerHour: selectedCar.pricePerHour,
+                        image: selectedCar.image,
+                        address: selectedCar.address || selectedCar.location || 'No location set for this vehicle'
                     }}
                 />
             )}

@@ -47,6 +47,7 @@ interface CarMarkerProps {
         price_per_hour: number;
         location: [number, number];
         image: string;
+        address: string;
     };
 }
 
@@ -139,7 +140,8 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
                     model: car.model,
                     type: car.type,
                     pricePerHour: Number(car.price_per_hour),
-                    image: car.image
+                    image: car.image,
+                    address: car.address
                 }}
             />
         </>

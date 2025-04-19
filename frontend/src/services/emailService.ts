@@ -12,6 +12,7 @@ interface EmailParams {
         model: string;
         booking_date: string;
         total_price: number;
+        address?: string;
     };
 }
 
@@ -76,15 +77,16 @@ export const sendBookingConfirmationEmail = async (params: EmailParams) => {
             email: params.to_email,
             car_name: `${params.car_details.make} ${params.car_details.model}`,
             start_date: startDate,
-            end_date: endDate || startDate, // Fallback to start date if end date is not available
-            pickup_location: 'Main Office',
+            end_date: endDate || startDate,
+            pickup_location: params.car_details.address || 'No location set for this vehicle',
             total_price: totalPrice.toFixed(2),
             booking_ref: `BOOK-${Date.now().toString().slice(-6)}`
         };
 
         console.log('Attempting to send booking confirmation email with params:', {
             ...templateParams,
-            email: '***@***' // Mask email for privacy in logs
+            email: '***@***', // Mask email for privacy in logs
+            pickup_location: params.car_details.address // Log the actual pickup location
         });
 
         if (!import.meta.env.VITE_EMAILJS_SERVICE_ID || !import.meta.env.VITE_EMAILJS_BOOKING_TEMPLATE_ID) {

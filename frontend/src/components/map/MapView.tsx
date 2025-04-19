@@ -31,6 +31,8 @@ interface Car {
     availability_status: 'available' | 'booked' | 'maintenance';
     latitude: number;
     longitude: number;
+    address: string;
+    location: string;
 }
 
 const MapView = () => {
@@ -50,9 +52,10 @@ const MapView = () => {
                     .filter((car: Car) => car.availability_status === 'available')
                     .map((car: Car) => ({
                         ...car,
-                        location: [car.latitude, car.longitude],
+                        location: [car.latitude, car.longitude] as [number, number],
                         image: car.image_url,
-                        pricePerHour: car.price_per_hour
+                        pricePerHour: car.price_per_hour,
+                        address: car.address || car.location || 'No location set for this vehicle'
                     }));
                 setCars(availableCars);
             } catch (error) {
@@ -123,7 +126,8 @@ const MapView = () => {
                                         type: car.type,
                                         price_per_hour: Number(car.price_per_hour),
                                         location: [car.latitude, car.longitude],
-                                        image: car.image_url
+                                        image: car.image_url,
+                                        address: car.address
                                     }}
                                 />
                             ))}

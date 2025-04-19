@@ -37,7 +37,7 @@ interface Car {
     price_per_hour: number;
     type: string;
     image_url: string;
-    location: string;
+    address: string;
     created_at: string;
 }
 
@@ -49,7 +49,7 @@ interface CarFormData {
     price_per_hour: number;
     type: string;
     image_url: string;
-    location: string;
+    address: string;
 }
 
 const initialFormData: CarFormData = {
@@ -60,7 +60,7 @@ const initialFormData: CarFormData = {
     price_per_hour: 0,
     type: 'sedan',
     image_url: '',
-    location: '',
+    address: '',
 };
 
 const CarManagement = () => {
@@ -110,7 +110,7 @@ const CarManagement = () => {
                 price_per_hour: car.price_per_hour,
                 type: car.type || 'sedan',
                 image_url: car.image_url || '',
-                location: car.location || '',
+                address: car.address || '',
             });
             setEditingId(car.id);
         } else {
@@ -209,7 +209,7 @@ const CarManagement = () => {
                 return `£${Number(value).toFixed(2)}`;
             },
         },
-        { field: 'location', headerName: 'Location', width: 150 },
+        { field: 'address', headerName: 'Location', width: 250 },
         {
             field: 'actions',
             headerName: 'Actions',
@@ -319,11 +319,13 @@ const CarManagement = () => {
                             fullWidth
                         />
                         <TextField
-                            name="location"
-                            label="Location"
-                            value={formData.location}
+                            name="address"
+                            label="Pick-up Location"
+                            value={formData.address}
                             onChange={handleInputChange}
                             fullWidth
+                            required
+                            placeholder="Enter the full address where the car is stationed"
                         />
                     </Box>
                 </DialogContent>
