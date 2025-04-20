@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const helmet = require('helmet');
 require('dotenv').config();
 
 // Import routes
@@ -10,6 +11,7 @@ const bookingRoutes = require('./routes/bookingRoutes');
 const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const adminBookingRoutes = require('./routes/adminBookingRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 const app = express();
 
@@ -18,7 +20,35 @@ app.use(cors({
     origin: ['http://localhost:5173', 'http://localhost:5174'], // Your frontend URLs
     credentials: true
 }));
-app.use(express.json());
+
+// Disable the default Content-Security-Policy
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://*.stripe.com"],
+                styleSrc: ["'self'", "'unsafe-inline'", "https://*.stripe.com"],
+                frameSrc: ["'self'", "https://*.stripe.com"],
+                imgSrc: ["'self'", "https://*.stripe.com", "data:", "https:"],
+                connectSrc: ["'self'", "https://*.stripe.com"],
+            }
+        }
+    })
+);
+
+// Special handling for Stripe webhook endpoint - MUST come BEFORE express.json()
+app.post('/api/payments/webhook', express.raw({type: 'application/json'}));
+
+// Regular middleware for other routes
+app.use((req, res, next) => {
+    if (req.originalUrl === '/api/payments/webhook') {
+        next();
+    } else {
+        express.json()(req, res, next);
+    }
+});
+
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static files
@@ -31,6 +61,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/bookings', adminBookingRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

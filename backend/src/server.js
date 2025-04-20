@@ -7,6 +7,7 @@ const Car = require('./models/carModel');
 const authRoutes = require('./routes/authRoutes');
 const carRoutes = require('./routes/carRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 const Booking = require('./models/bookingModel');
 const authenticateToken = require('./middleware/authenticateToken');
 const userRoutes = require('./routes/userRoutes');
@@ -22,7 +23,18 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
 }));
-app.use(express.json());
+
+// Special handling for Stripe webhook endpoint
+app.post('/api/payments/webhook', express.raw({type: 'application/json'}));
+
+// Regular JSON parsing for all other routes
+app.use((req, res, next) => {
+    if (req.originalUrl === '/api/payments/webhook') {
+        next();
+    } else {
+        express.json()(req, res, next);
+    }
+});
 
 // Initialize database tables
 const initializeDatabase = async () => {
@@ -74,6 +86,7 @@ app.use('/api/cars', carRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/ratings', ratingRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/payments', paymentRoutes);
 
 const PORT = process.env.PORT || 5001;
 

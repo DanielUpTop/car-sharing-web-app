@@ -8,7 +8,10 @@ import {
     Box,
     Typography,
     Alert,
-    Snackbar
+    Snackbar,
+    Stepper,
+    Step,
+    StepLabel
 } from '@mui/material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -17,6 +20,7 @@ import { differenceInDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import MuiAlert from '@mui/material/Alert';
 import { sendBookingConfirmationEmail } from '../../services/emailService';
+import PaymentProvider from '../payments/PaymentProvider';
 
 interface Car {
     id: number;
@@ -34,13 +38,17 @@ interface BookingDialogProps {
     car: Car;
 }
 
+const steps = ['Select Dates', 'Review & Pay'];
+
 const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
     const navigate = useNavigate();
+    const [activeStep, setActiveStep] = useState(0);
     const [startDate, setStartDate] = useState<Date | null>(null);
     const [endDate, setEndDate] = useState<Date | null>(null);
     const [error, setError] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [clientSecret, setClientSecret] = useState<string>('');
 
     const calculateTotalPrice = () => {
         if (startDate && endDate) {
@@ -63,28 +71,108 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     };
 
-    const handleSubmit = async () => {
-        if (!startDate || !endDate) {
-            setError('Please select both start and end dates');
-            return;
+    const checkAuthentication = () => {
+        const token = localStorage.getItem('token');
+        console.log('Checking authentication, token:', token ? 'exists' : 'missing');
+        if (!token) {
+            setError('Please log in to make a booking');
+            onClose();
+            navigate('/login', { state: { from: window.location.pathname } });
+            return false;
         }
+        return true;
+    };
 
-        if (endDate < startDate) {
-            setError('End date cannot be before start date');
-            return;
+    const handleNext = async () => {
+        if (activeStep === 0) {
+            console.log('Starting booking process...');
+            if (!checkAuthentication()) {
+                return;
+            }
+
+            if (!startDate || !endDate) {
+                setError('Please select both start and end dates');
+                return;
+            }
+
+            if (endDate < startDate) {
+                setError('End date cannot be before start date');
+                return;
+            }
+
+            const totalPrice = calculateTotalPrice();
+            if (totalPrice <= 0) {
+                setError('Invalid price calculation');
+                return;
+            }
+
+            // Create payment intent
+            try {
+                const token = localStorage.getItem('token');
+                console.log('Creating payment intent...');
+                setLoading(true);
+                setError('');
+
+                const totalAmount = calculateTotalPrice();
+                console.log('Calculated total amount:', totalAmount);
+
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/payments/create-payment-intent`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        amount: totalAmount,
+                        carId: car.id,
+                        startDate: formatDateForMySQL(startDate),
+                        endDate: formatDateForMySQL(endDate)
+                    })
+                });
+
+                console.log('Payment intent response status:', response.status);
+                
+                if (response.status === 401) {
+                    console.log('Authentication failed, redirecting to login...');
+                    localStorage.removeItem('token');
+                    onClose();
+                    navigate('/login', { state: { from: window.location.pathname } });
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Payment intent creation failed:', errorData);
+                    throw new Error(errorData.message || 'Failed to create payment intent');
+                }
+
+                const data = await response.json();
+                console.log('Payment intent created successfully');
+                setClientSecret(data.clientSecret);
+                setActiveStep(1);
+            } catch (err) {
+                console.error('Payment intent creation error:', err);
+                setError(err instanceof Error ? err.message : 'Failed to initialize payment');
+            } finally {
+                setLoading(false);
+            }
         }
+    };
 
-        const totalPrice = calculateTotalPrice();
-        if (totalPrice <= 0) {
-            setError('Invalid price calculation');
-            return;
-        }
+    const handleBack = () => {
+        setActiveStep((prevStep) => prevStep - 1);
+        setError('');
+    };
 
-        setLoading(true);
+    const handlePaymentSuccess = async (paymentIntentId: string) => {
         try {
             const token = localStorage.getItem('token');
             if (!token) {
                 throw new Error('No authentication token found');
+            }
+
+            if (!startDate || !endDate) {
+                throw new Error('Start and end dates are required');
             }
 
             const formattedStartDate = formatDateForMySQL(startDate);
@@ -94,15 +182,11 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
                 car_id: car.id,
                 start_date: formattedStartDate,
                 end_date: formattedEndDate,
-                total_price: Number(totalPrice.toFixed(2))
+                total_price: Number(calculateTotalPrice().toFixed(2)),
+                payment_intent_id: paymentIntentId
             };
 
-            console.log('Attempting to create booking with data:', {
-                ...bookingData,
-                token: token.substring(0, 10) + '...'
-            });
-
-            const response = await fetch('http://localhost:5001/api/bookings', {
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/bookings`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -112,59 +196,51 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
             });
 
             const data = await response.json();
-            console.log('Server response:', data);
-            
             if (!response.ok) {
-                throw new Error(data.error || data.message || 'Failed to create booking');
+                throw new Error(data.message || 'Failed to create booking');
             }
 
-            // Remove email sending from here since it should only happen after admin approval
             setShowSuccess(true);
             setTimeout(() => {
                 onClose();
                 navigate('/dashboard/bookings');
             }, 2000);
-
         } catch (err) {
             console.error('Booking error:', err);
-            setError(err instanceof Error ? err.message : 'An error occurred');
-        } finally {
-            setLoading(false);
+            setError(err instanceof Error ? err.message : 'Failed to create booking');
         }
     };
 
-    const renderCarDetails = () => {
-        console.log('Car details in dialog:', car); // Debug log
-        return (
-            <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle1" gutterBottom>
-                    <strong>Car:</strong> {car.make} {car.model}
-                </Typography>
-                <Typography variant="subtitle1" gutterBottom>
-                    <strong>Pick-up Location:</strong> {car.address || 'No location set for this vehicle'}
-                </Typography>
-                {!car.address && (
-                    <Alert severity="warning" sx={{ mt: 1 }}>
-                        This vehicle's location has not been set. Please contact support for assistance.
-                    </Alert>
-                )}
-            </Box>
-        );
+    const handlePaymentError = (error: string) => {
+        setError(error);
+        setActiveStep(0);
     };
 
-    return (
-        <>
-            <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-                <DialogTitle sx={{ bgcolor: 'secondary.main', color: 'white', py: 2 }}>
-                    Book {car.make} {car.model}
-                </DialogTitle>
-                <DialogContent sx={{ pt: 3 }}>
-                    {error && (
-                        <Alert severity="error" sx={{ mb: 3 }}>
-                            {error}
-                        </Alert>
-                    )}
-                    {renderCarDetails()}
+    const renderCarDetails = () => (
+        <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" gutterBottom>
+                <strong>Car:</strong> {car.make} {car.model}
+            </Typography>
+            <Typography variant="subtitle1" gutterBottom>
+                <strong>Pick-up Location:</strong> {car.address || 'No location set for this vehicle'}
+            </Typography>
+            {!car.address && (
+                <Alert severity="warning" sx={{ mt: 1 }}>
+                    This vehicle's location has not been set. Please contact support for assistance.
+                </Alert>
+            )}
+            {startDate && endDate && (
+                <Typography variant="subtitle1" sx={{ mt: 2 }}>
+                    <strong>Total Price:</strong> £{calculateTotalPrice().toFixed(2)}
+                </Typography>
+            )}
+        </Box>
+    );
+
+    const renderStepContent = () => {
+        switch (activeStep) {
+            case 0:
+                return (
                     <LocalizationProvider dateAdapter={AdapterDateFns}>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                             <DateTimePicker
@@ -213,76 +289,75 @@ const BookingDialog = ({ open, onClose, car }: BookingDialogProps) => {
                             />
                         </Box>
                     </LocalizationProvider>
-
-                    <Box sx={{ 
-                        mt: 4, 
-                        p: 2, 
-                        bgcolor: 'secondary.main', 
-                        borderRadius: 1,
-                        color: 'white'
-                    }}>
-                        <Typography variant="h6" gutterBottom>
-                            Booking Summary
-                        </Typography>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography>Hourly Rate:</Typography>
-                            <Typography>£{Number(car.pricePerHour).toFixed(2)}</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography>Total Hours:</Typography>
-                            <Typography>
-                                {startDate && endDate 
-                                    ? `${Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60))} hours`
-                                    : '-'
-                                }
-                            </Typography>
-                        </Box>
-                        <Box sx={{ 
-                            display: 'flex', 
-                            justifyContent: 'space-between',
-                            borderTop: '1px solid rgba(255,255,255,0.2)',
-                            pt: 1,
-                            mt: 1
-                        }}>
-                            <Typography variant="h6">Total Price:</Typography>
-                            <Typography variant="h6">
-                                £{calculateTotalPrice().toFixed(2)}
-                            </Typography>
-                        </Box>
+                );
+            case 1:
+                return clientSecret ? (
+                    <PaymentProvider
+                        clientSecret={clientSecret}
+                        amount={calculateTotalPrice()}
+                        onSuccess={handlePaymentSuccess}
+                        onError={handlePaymentError}
+                    />
+                ) : (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                        <Typography>Loading payment form...</Typography>
                     </Box>
+                );
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <>
+            <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+                <DialogTitle sx={{ bgcolor: 'secondary.main', color: 'white', py: 2 }}>
+                    Book {car.make} {car.model}
+                </DialogTitle>
+                <DialogContent sx={{ pt: 3 }}>
+                    {error && (
+                        <Alert severity="error" sx={{ mb: 3 }}>
+                            {error}
+                        </Alert>
+                    )}
+                    <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+                        {steps.map((label) => (
+                            <Step key={label}>
+                                <StepLabel>{label}</StepLabel>
+                            </Step>
+                        ))}
+                    </Stepper>
+                    {renderCarDetails()}
+                    {renderStepContent()}
                 </DialogContent>
-                <DialogActions sx={{ p: 3, bgcolor: 'grey.50' }}>
-                    <Button 
-                        onClick={onClose}
-                        variant="outlined"
-                        color="secondary"
-                    >
+                <DialogActions sx={{ px: 3, pb: 3 }}>
+                    <Button onClick={onClose} disabled={loading}>
                         Cancel
                     </Button>
-                    <Button
-                        onClick={handleSubmit}
-                        variant="contained"
-                        color="secondary"
-                        disabled={loading || !startDate || !endDate}
-                        sx={{ minWidth: 150 }}
-                    >
-                        {loading ? 'Booking...' : 'Confirm Booking'}
-                    </Button>
+                    {activeStep > 0 && (
+                        <Button onClick={handleBack} disabled={loading}>
+                            Back
+                        </Button>
+                    )}
+                    {activeStep === 0 && (
+                        <Button
+                            onClick={handleNext}
+                            variant="contained"
+                            color="primary"
+                            disabled={loading || !startDate || !endDate}
+                        >
+                            Next
+                        </Button>
+                    )}
                 </DialogActions>
             </Dialog>
-
-            <Snackbar 
-                open={showSuccess} 
-                autoHideDuration={2000} 
-                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+            <Snackbar
+                open={showSuccess}
+                autoHideDuration={6000}
+                onClose={() => setShowSuccess(false)}
             >
-                <MuiAlert 
-                    elevation={6} 
-                    variant="filled" 
-                    severity="success"
-                    sx={{ width: '100%' }}
-                >
-                    Booking confirmed successfully! Redirecting to My Bookings...
+                <MuiAlert elevation={6} variant="filled" severity="success">
+                    Booking created successfully! Redirecting to your bookings...
                 </MuiAlert>
             </Snackbar>
         </>
