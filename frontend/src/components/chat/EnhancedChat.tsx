@@ -1133,6 +1133,18 @@ const EnhancedChat: React.FC = () => {
                                                     mb: 2
                                                 }}
                                             >
+                                                {/* Sender name above message */}
+                                                <Typography 
+                                                    variant="subtitle2" 
+                                                    sx={{ 
+                                                        mb: 0.5,
+                                                        fontWeight: 'bold',
+                                                        color: message.sender_id === user?.id ? '#689f38' : '#1976d2',
+                                                    }}
+                                                >
+                                                    {message.sender_id === user?.id ? 'You' : 'Support Team'}
+                                                </Typography>
+                                                
                                                 <Paper 
                                                     elevation={1}
                                                     sx={{
@@ -1147,7 +1159,7 @@ const EnhancedChat: React.FC = () => {
                                                 <Typography 
                                                     variant="caption" 
                                                     color="text.secondary" 
-                                                    sx={{ mt: 0.5 }}
+                                                    sx={{ mt: 0.5, fontSize: '0.7rem' }}
                                                 >
                                                     {message.created_at ? new Date(message.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                                                 </Typography>
