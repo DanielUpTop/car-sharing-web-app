@@ -28,7 +28,8 @@ import {
     PersonOutline as PersonIcon,
     Archive as ArchiveIcon,
     FilterList as FilterIcon,
-    CalendarToday as CalendarIcon
+    CalendarToday as CalendarIcon,
+    Close as CloseIcon
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import api from '../../../api/axios';
@@ -238,6 +239,40 @@ const ChatArchive: React.FC = () => {
         }
     };
 
+    const handleEndChat = async (conversationId: number) => {
+        try {
+            const response = await api.put(`/api/chat/admin/conversations/${conversationId}/close`);
+            
+            if (response.status === 200) {
+                // Update conversation status in the UI
+                setConversations(prev => prev.map(conv => 
+                    conv.id === conversationId ? { ...conv, status: 'closed' } : conv
+                ));
+                
+                if (selectedConversation?.id === conversationId) {
+                    setSelectedConversation(prev => prev ? { ...prev, status: 'closed' } : null);
+                    
+                    // Add a system message to indicate the chat was ended
+                    setMessages(prev => [...prev, {
+                        id: Date.now(),
+                        conversation_id: conversationId,
+                        sender_id: 0,
+                        content: "This chat has been ended by an administrator.",
+                        is_read: true,
+                        created_at: new Date().toISOString(),
+                        sender_email: "system@carsharing.com",
+                        sender_first_name: "System",
+                        sender_last_name: "",
+                        sender_role: "system"
+                    }]);
+                }
+            }
+        } catch (err: any) {
+            console.error('Error ending chat:', err);
+            setError(err?.response?.data?.message || 'Failed to end chat conversation');
+        }
+    };
+
     if (loading) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -418,13 +453,53 @@ const ChatArchive: React.FC = () => {
                         {selectedConversation ? (
                             <>
                                 <Box sx={{ p: 2, borderBottom: '1px solid rgba(0, 0, 0, 0.12)' }}>
-                                    <Typography variant="h6">
-                                        Chat with {selectedConversation.user.first_name} {selectedConversation.user.last_name}
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {selectedConversation.user.email} • 
-                                        Started on {format(new Date(selectedConversation.created_at), 'MMMM d, yyyy')}
-                                    </Typography>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <Typography variant="h6">
+                                                Chat with {selectedConversation.user.first_name} {selectedConversation.user.last_name}
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary">
+                                                {selectedConversation.user.email} • 
+                                                Started on {format(new Date(selectedConversation.created_at), 'MMMM d, yyyy')}
+                                            </Typography>
+                                        </div>
+                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                            <Chip
+                                                label="open"
+                                                size="small"
+                                                color="success"
+                                                sx={{ mr: 1 }}
+                                            />
+                                            <Button 
+                                                disabled={selectedConversation.status === 'closed'}
+                                                onClick={() => {
+                                                    if (window.confirm('Are you sure you want to end this chat? This action cannot be undone.')) {
+                                                        handleEndChat(selectedConversation.id);
+                                                    }
+                                                }}
+                                                sx={{ 
+                                                    minWidth: 'auto',
+                                                    bgcolor: 'white',
+                                                    color: '#e53935',
+                                                    fontSize: '0.75rem',
+                                                    px: 1.5,
+                                                    py: 0.5,
+                                                    borderRadius: '20px',
+                                                    textTransform: 'none',
+                                                    fontWeight: 'normal',
+                                                    border: '1px solid #e53935',
+                                                    boxShadow: 'none',
+                                                    '&:hover': {
+                                                        bgcolor: 'rgba(229, 57, 53, 0.1)',
+                                                        border: '1px solid #e53935',
+                                                    }
+                                                }}
+                                            >
+                                                <CloseIcon fontSize="small" sx={{ mr: 0.5, fontSize: '0.875rem' }} />
+                                                End Chat
+                                            </Button>
+                                        </Box>
+                                    </Box>
                                 </Box>
                                 
                                 <Box sx={{ 
@@ -455,6 +530,17 @@ const ChatArchive: React.FC = () => {
                                                         mb: 2
                                                     }}
                                                 >
+                                                    <Typography 
+                                                        variant="subtitle2" 
+                                                        sx={{ 
+                                                            mb: 0.5,
+                                                            fontWeight: 'bold',
+                                                            color: isAdmin ? '#1976d2' : '#689f38',
+                                                        }}
+                                                    >
+                                                        {isAdmin ? 'You' : `${message.sender_first_name} ${message.sender_last_name}`}
+                                                    </Typography>
+                                                    
                                                     <Paper
                                                         elevation={1}
                                                         sx={{
@@ -469,15 +555,10 @@ const ChatArchive: React.FC = () => {
                                                     </Paper>
                                                     <Typography 
                                                         variant="caption" 
-                                                        sx={{ 
-                                                            mt: 0.5, 
-                                                            ml: isAdmin ? 0 : 1,
-                                                            mr: isAdmin ? 1 : 0,
-                                                            color: 'text.secondary'
-                                                        }}
+                                                        color="text.secondary" 
+                                                        sx={{ mt: 0.5, fontSize: '0.7rem' }}
                                                     >
-                                                        {message.sender_first_name} {message.sender_last_name} • 
-                                                        {format(new Date(message.created_at), 'MMM d, h:mm a')}
+                                                        {format(new Date(message.created_at), 'h:mm a')}
                                                     </Typography>
                                                 </Box>
                                             );
