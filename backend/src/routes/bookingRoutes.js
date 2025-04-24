@@ -186,4 +186,33 @@ router.get('/', authenticateToken, async (req, res) => {
     }
 });
 
+// Get active bookings that can be insured
+router.get('/active', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        // Get bookings that are confirmed but not yet completed or cancelled
+        // and don't already have insurance
+        const [bookings] = await db.query(
+            `SELECT b.id, b.start_date, b.end_date, b.status, c.make as car_make, c.model as car_model
+             FROM bookings b
+             JOIN cars c ON b.car_id = c.id
+             LEFT JOIN insurance_policies ip ON b.id = ip.booking_id
+             WHERE b.user_id = ?
+             AND b.status IN ('confirmed', 'pending')
+             AND ip.id IS NULL
+             AND b.end_date > NOW()`,
+            [userId]
+        );
+        
+        res.json(bookings);
+    } catch (error) {
+        console.error('Error fetching active bookings:', error);
+        res.status(500).json({ 
+            message: 'Error fetching active bookings',
+            error: error.message 
+        });
+    }
+});
+
 module.exports = router; 

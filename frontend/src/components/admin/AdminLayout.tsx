@@ -28,6 +28,8 @@ import {
     ChevronLeft,
     ChevronRight,
     Logout as LogoutIcon,
+    ChatBubble as ChatIcon,
+    ConfirmationNumber as TicketIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -68,10 +70,12 @@ const AdminLayout = () => {
         { text: 'User Management', icon: <PeopleIcon />, path: '/admin/users' },
         { text: 'Booking Management', icon: <BookingIcon />, path: '/admin/bookings' },
         { text: 'Analytics', icon: <AnalyticsIcon />, path: '/admin/analytics' },
+        { text: 'Live Chat Archive', icon: <ChatIcon />, path: '/admin/chat-archive' },
+        { text: 'Support Tickets', icon: <TicketIcon />, path: '/admin/tickets' },
     ];
 
     return (
-        <Box sx={{ display: 'flex' }}>
+        <Box sx={{ display: 'flex', height: '100vh' }}>
             <AppBar
                 position="fixed"
                 sx={{
@@ -169,9 +173,10 @@ const AdminLayout = () => {
                 component="main"
                 sx={{
                     flexGrow: 1,
-                    p: 3,
                     width: '100%',
-                    marginTop: theme.spacing(8),
+                    height: `calc(100vh - ${theme.mixins.toolbar.minHeight}px)`,
+                    marginTop: `${theme.mixins.toolbar.minHeight}px`,
+                    overflow: 'hidden'
                 }}
             >
                 <Outlet />

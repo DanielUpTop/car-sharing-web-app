@@ -1,106 +1,127 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import api from '../api/axios';
 
 interface User {
     id: number;
-    email: string;
-    role: string;
     first_name: string;
     last_name: string;
-    status: string;
+    email: string;
+    role: string;
 }
 
 interface AuthContextType {
     user: User | null;
-    token: string | null;
-    login: (token: string, user: User) => void;
-    logout: () => void;
+    loading: boolean;
+    login: (email: string, password: string) => Promise<void>;
+    logout: () => Promise<void>;
+    isAuthenticated: boolean;
     isAdmin: () => boolean;
+    error: string | null;
+    token: string | null;
 }
 
-const AuthContext = createContext<AuthContextType>({
-    user: null,
-    token: null,
-    login: () => {},
-    logout: () => {},
-    isAdmin: () => false
-});
+const AuthContext = createContext<AuthContextType | null>(null);
 
-export const useAuth = () => useContext(AuthContext);
+// Export the useAuth hook
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (!context) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [initialized, setInitialized] = useState(false);
     const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
 
-    // Initialize auth state from localStorage
     useEffect(() => {
-        try {
-            const savedToken = localStorage.getItem('token');
-            const savedUser = localStorage.getItem('user');
-            
-            if (savedToken && savedUser) {
-                const parsedUser = JSON.parse(savedUser);
-                setToken(savedToken);
-                setUser(parsedUser);
-                console.log('Initialized auth state from localStorage:', {
-                    token: savedToken,
-                    user: parsedUser
-                });
-            }
-        } catch (error) {
-            console.error('Error initializing auth state:', error);
-            // Clear potentially corrupted data
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-        } finally {
-            setInitialized(true);
-        }
+        checkAuth();
     }, []);
 
-    const login = (newToken: string, userData: User) => {
-        console.log('Login called with:', { token: newToken, user: userData });
-        
-        // Validate input
-        if (!newToken || !userData) {
-            console.error('Invalid login data');
-            return;
-        }
-
-        // Update localStorage
+    const checkAuth = async () => {
         try {
-            localStorage.setItem('token', newToken);
-            localStorage.setItem('user', JSON.stringify(userData));
-            
-            // Update state
-            setToken(newToken);
-            setUser(userData);
-            
-            console.log('Auth state updated successfully');
+            if (!token) {
+                setLoading(false);
+                return;
+            }
+
+            const response = await api.get('/api/auth/verify-token');
+            setUser(response.data.user);
+            setError(null);
         } catch (error) {
-            console.error('Error updating auth state:', error);
+            console.error('<<<< AuthContext: checkAuth FAILED! Clearing token and user. Error:', error);
+            localStorage.removeItem('token');
+            setToken(null);
+            setUser(null);
+            setError('Authentication failed');
+        } finally {
+            setLoading(false);
         }
     };
 
-    const logout = () => {
-        console.log('Logging out...');
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setToken(null);
-        setUser(null);
+    const login = async (email: string, password: string) => {
+        try {
+            setError(null);
+            const response = await api.post('/api/auth/login', { email, password });
+            const { token: newToken, user } = response.data;
+            
+            if (!newToken || !user) {
+                throw new Error('Invalid response from server');
+            }
+
+            localStorage.setItem('token', newToken);
+            setToken(newToken);
+            setUser(user);
+            setError(null);
+
+            // Return the user role so the component can handle navigation
+            return user.role;
+        } catch (error: any) {
+            console.error('Login failed:', error);
+            localStorage.removeItem('token');
+            setToken(null);
+            setUser(null);
+            
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to login';
+            setError(errorMessage);
+            throw new Error(errorMessage);
+        }
+    };
+
+    const logout = async () => {
+        try {
+            await api.post('/api/auth/logout');
+        } catch (error) {
+            console.error('Logout failed:', error);
+        } finally {
+            localStorage.removeItem('token');
+            setToken(null);
+            setUser(null);
+            setError(null);
+            window.location.href = '/login';
+        }
     };
 
     const isAdmin = () => {
-        const isAdminUser = user?.role === 'admin';
-        console.log('isAdmin check:', { user, isAdmin: isAdminUser });
-        return isAdminUser;
+        return user?.role === 'admin';
     };
 
-    if (!initialized) {
-        return null; // or a loading spinner
-    }
-
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, isAdmin }}>
+        <AuthContext.Provider
+            value={{
+                user,
+                loading,
+                login,
+                logout,
+                isAuthenticated: !!user,
+                isAdmin,
+                error,
+                token
+            }}
+        >
             {children}
         </AuthContext.Provider>
     );

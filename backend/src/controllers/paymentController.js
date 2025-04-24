@@ -2,44 +2,54 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const pool = require('../config/database');
 const logger = require('../utils/logger');
 
-// Create a payment intent for a booking
-const createPaymentSession = async (req, res) => {
+// Renamed function to match route usage
+const createPaymentIntent = async (req, res) => {
+    console.log('[PaymentController] Entered createPaymentIntent');
     try {
         const { amount, carId, startDate, endDate } = req.body;
         const userId = req.user.id;
+        console.log(`[PaymentController] Data received: userId=${userId}, amount=${amount}, carId=${carId}, startDate=${startDate}, endDate=${endDate}`);
 
-        // Get car details from database
-        const [car] = await pool.query(
-            'SELECT make, model, price_per_hour FROM cars WHERE id = ?',
-            [carId]
-        );
-
-        if (!car.length) {
-            return res.status(404).json({ message: 'Car not found' });
+        if (!amount || !carId || !startDate || !endDate) {
+            console.log('[PaymentController] Missing required fields');
+            return res.status(400).json({ message: 'Missing required fields' });
         }
 
-        const carDetails = car[0];
+        // Format dates for Stripe metadata (ISO string format)
+        const formattedStartDate = new Date(startDate).toISOString();
+        const formattedEndDate = new Date(endDate).toISOString();
+        console.log(`[PaymentController] Formatted dates: start=${formattedStartDate}, end=${formattedEndDate}`);
 
+        // Validate dates
+        if (isNaN(new Date(startDate).getTime()) || isNaN(new Date(endDate).getTime())) {
+             console.log('[PaymentController] Invalid date format');
+            return res.status(400).json({ message: 'Invalid date format' });
+        }
+
+        console.log('[PaymentController] Attempting to create Stripe Payment Intent...');
         // Create payment intent
         const paymentIntent = await stripe.paymentIntents.create({
             amount: Math.round(amount * 100), // Convert to pence
             currency: 'gbp',
+            payment_method_types: ['card'],
             metadata: {
                 userId: userId.toString(),
                 carId: carId.toString(),
-                carMake: carDetails.make,
-                carModel: carDetails.model,
-                startDate: startDate,
-                endDate: endDate
+                startDate: formattedStartDate,
+                endDate: formattedEndDate
             }
         });
+        console.log('[PaymentController] Stripe Payment Intent created successfully:', paymentIntent.id);
 
+        console.log('[PaymentController] Sending clientSecret back to frontend.');
         res.json({
             clientSecret: paymentIntent.client_secret
         });
+        console.log('[PaymentController] Response sent.');
     } catch (error) {
+        console.error('[PaymentController] Error caught in createPaymentIntent:', error);
         logger.error('Error creating payment intent:', error);
-        res.status(500).json({ message: 'Error creating payment intent' });
+        res.status(500).json({ message: 'Error creating payment intent', error: error.message || 'Unknown error' });
     }
 };
 
@@ -57,28 +67,25 @@ const handleWebhook = async (req, res) => {
         // Handle successful payment
         if (event.type === 'payment_intent.succeeded') {
             const paymentIntent = event.data.object;
-            const bookingId = paymentIntent.metadata.bookingId;
+            const { userId, carId, startDate, endDate } = paymentIntent.metadata;
+            const amount = paymentIntent.amount / 100; // Convert from pence to pounds
 
-            // Update booking status to confirmed
+            // Parse dates back from ISO string
+            const parsedStartDate = new Date(startDate);
+            const parsedEndDate = new Date(endDate);
+
+            // Create booking
             await pool.query(
-                'UPDATE bookings SET status = ?, payment_status = ? WHERE id = ?',
-                ['confirmed', 'paid', bookingId]
+                `INSERT INTO bookings (user_id, car_id, start_date, end_date, total_price, status, payment_intent_id)
+                 VALUES (?, ?, ?, ?, ?, 'confirmed', ?)`,
+                [userId, carId, parsedStartDate, parsedEndDate, amount, paymentIntent.id]
             );
 
-            // Get booking details for email notification
-            const [bookingDetails] = await pool.query(
-                `SELECT b.*, u.email, u.first_name, c.make, c.model, c.address 
-                 FROM bookings b 
-                 JOIN users u ON b.user_id = u.id 
-                 JOIN cars c ON b.car_id = c.id 
-                 WHERE b.id = ?`,
-                [bookingId]
+            // Update car availability
+            await pool.query(
+                'UPDATE cars SET availability_status = ? WHERE id = ?',
+                ['booked', carId]
             );
-
-            if (bookingDetails.length > 0) {
-                // Send confirmation email (implement email service as needed)
-                // await emailService.sendPaymentConfirmation(bookingDetails[0]);
-            }
         }
 
         res.json({ received: true });
@@ -128,7 +135,7 @@ const handlePaymentCancelled = async (req, res) => {
 };
 
 module.exports = {
-    createPaymentSession,
+    createPaymentIntent,
     handleWebhook,
     handlePaymentCancelled
 }; 

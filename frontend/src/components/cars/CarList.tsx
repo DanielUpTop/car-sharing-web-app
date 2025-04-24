@@ -350,8 +350,9 @@ const CarList = () => {
                         type: selectedCar.type,
                         pricePerHour: selectedCar.pricePerHour,
                         image: selectedCar.image,
-                        address: selectedCar.address || selectedCar.location || 'No location set for this vehicle'
+                        address: (selectedCar.address || selectedCar.location || 'No location set for this vehicle') as string
                     }}
+                    onBookingComplete={() => navigate('/dashboard/bookings')}
                 />
             )}
 

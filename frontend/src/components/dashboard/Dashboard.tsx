@@ -18,6 +18,10 @@ import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import BookOnlineIcon from '@mui/icons-material/BookOnline';
 import PersonIcon from '@mui/icons-material/Person';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import HelpIcon from '@mui/icons-material/Help';
+import ChatIcon from '@mui/icons-material/Chat';
+import CardMembershipIcon from '@mui/icons-material/CardMembership';
+import SecurityIcon from '@mui/icons-material/Security';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -154,6 +158,122 @@ const Dashboard = () => {
                                     size="large"
                                 >
                                     View Dashboard
+                                </Button>
+                            </CardActions>
+                        </Card>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                        <Card sx={{ 
+                            height: '100%', 
+                            display: 'flex', 
+                            flexDirection: 'column',
+                            '&:hover': { transform: 'scale(1.02)', transition: 'transform 0.2s' }
+                        }}>
+                            <CardContent sx={{ flexGrow: 1, textAlign: 'center', py: 4 }}>
+                                <HelpIcon sx={{ fontSize: 60, color: 'warning.main', mb: 2 }} />
+                                <Typography gutterBottom variant="h5" component="h2">
+                                    Help Center
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Get help, view FAQs, and manage support tickets
+                                </Typography>
+                            </CardContent>
+                            <CardActions sx={{ justifyContent: 'center', pb: 3 }}>
+                                <Button 
+                                    onClick={() => navigate('/dashboard/help')}
+                                    variant="contained" 
+                                    color="warning"
+                                    size="large"
+                                >
+                                    View Help Center
+                                </Button>
+                            </CardActions>
+                        </Card>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                        <Card sx={{ 
+                            height: '100%', 
+                            display: 'flex', 
+                            flexDirection: 'column',
+                            '&:hover': { transform: 'scale(1.02)', transition: 'transform 0.2s' }
+                        }}>
+                            <CardContent sx={{ flexGrow: 1, textAlign: 'center', py: 4 }}>
+                                <CardMembershipIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
+                                <Typography gutterBottom variant="h5" component="h2">
+                                    Membership
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    View and manage your membership plans and benefits
+                                </Typography>
+                            </CardContent>
+                            <CardActions sx={{ justifyContent: 'center', pb: 3 }}>
+                                <Button 
+                                    onClick={() => navigate('/dashboard/membership')}
+                                    variant="contained" 
+                                    color="primary"
+                                    size="large"
+                                >
+                                    View Membership
+                                </Button>
+                            </CardActions>
+                        </Card>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                        <Card sx={{ 
+                            height: '100%', 
+                            display: 'flex', 
+                            flexDirection: 'column',
+                            '&:hover': { transform: 'scale(1.02)', transition: 'transform 0.2s' }
+                        }}>
+                            <CardContent sx={{ flexGrow: 1, textAlign: 'center', py: 4 }}>
+                                <SecurityIcon sx={{ fontSize: 60, color: 'error.main', mb: 2 }} />
+                                <Typography gutterBottom variant="h5" component="h2">
+                                    Insurance
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Manage your insurance policies and claims
+                                </Typography>
+                            </CardContent>
+                            <CardActions sx={{ justifyContent: 'center', pb: 3 }}>
+                                <Button 
+                                    onClick={() => navigate('/dashboard/insurance')}
+                                    variant="contained" 
+                                    color="error"
+                                    size="large"
+                                >
+                                    View Insurance
+                                </Button>
+                            </CardActions>
+                        </Card>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                        <Card sx={{ 
+                            height: '100%', 
+                            display: 'flex', 
+                            flexDirection: 'column',
+                            '&:hover': { transform: 'scale(1.02)', transition: 'transform 0.2s' }
+                        }}>
+                            <CardContent sx={{ flexGrow: 1, textAlign: 'center', py: 4 }}>
+                                <ChatIcon sx={{ fontSize: 60, color: 'success.main', mb: 2 }} />
+                                <Typography gutterBottom variant="h5" component="h2">
+                                    Live Chat
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Chat with our support team in real-time
+                                </Typography>
+                            </CardContent>
+                            <CardActions sx={{ justifyContent: 'center', pb: 3 }}>
+                                <Button 
+                                    onClick={() => navigate('/dashboard/chat')}
+                                    variant="contained" 
+                                    color="success"
+                                    size="large"
+                                >
+                                    Start Chat
                                 </Button>
                             </CardActions>
                         </Card>

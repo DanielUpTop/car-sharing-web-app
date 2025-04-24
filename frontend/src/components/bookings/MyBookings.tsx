@@ -38,6 +38,7 @@ interface Booking {
 }
 
 const MyBookings = () => {
+    console.log('[MyBookings] Component rendering started.');
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -50,32 +51,44 @@ const MyBookings = () => {
     const [ratingLoading, setRatingLoading] = useState(false);
 
     useEffect(() => {
-        const fetchBookings = async () => {
-            try {
-                const token = localStorage.getItem('token');
-                const response = await fetch('http://localhost:5001/api/bookings/user', {
+        const fetchBookings = () => {
+            setLoading(true);
+            setError('');
+
+            const token = localStorage.getItem('token');
+            if (!token) {
+                setError('No authentication token found');
+                setLoading(false);
+                return;
+            }
+            
+            fetch('http://localhost:5001/api/bookings/user', {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
-                });
-                const data = await response.json();
-
+            })
+            .then(response => {
                 if (!response.ok) {
-                    throw new Error(data.message || 'Failed to fetch bookings');
+                    return response.json().then(errorData => {
+                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                    });
                 }
-
+                return response.json();
+            })
+            .then(data => {
                 const formattedBookings = data.map((booking: any) => ({
                     ...booking,
                     total_price: Number(booking.total_price)
                 }));
-
                 setBookings(formattedBookings);
-            } catch (err) {
-                console.error('Error fetching bookings:', err);
+            })
+            .catch(err => {
                 setError(err instanceof Error ? err.message : 'Failed to fetch bookings');
-            } finally {
+                console.error('Error fetching bookings:', err);
+            })
+            .finally(() => {
                 setLoading(false);
-            }
+            });
         };
 
         fetchBookings();

@@ -32,7 +32,7 @@ const PaymentProvider: React.FC<PaymentProviderProps> = ({
         clientSecret,
         appearance: {
             theme: 'stripe' as const,
-        },
+        }
     };
 
     return (

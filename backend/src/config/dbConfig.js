@@ -1,10 +1,16 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
+console.log('Database configuration:', {
+    host: '127.0.0.1',
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'car_sharing_db'
+});
+
+const pool = mysql.createPool({
+    host: '127.0.0.1', // Using IPv4 explicitly
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || 'ghana123',
     database: process.env.DB_NAME || 'car_sharing_db',
     waitForConnections: true,
     connectionLimit: 10,
@@ -12,16 +18,14 @@ const pool = mysql.createPool({
 });
 
 // Test the connection
-const testConnection = async () => {
-    try {
-        const connection = await pool.getConnection();
-        console.log('Database connection successful');
+pool.getConnection()
+    .then(connection => {
+        console.log('Database connected successfully');
         connection.release();
-    } catch (error) {
-        console.error('Error connecting to database:', error);
-    }
-};
-
-testConnection();
+    })
+    .catch(err => {
+        console.error('Error connecting to the database:', err.message);
+        console.error('Full error:', err);
+    });
 
 module.exports = pool; 

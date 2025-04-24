@@ -18,7 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 const Login = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { login } = useAuth();
+    const { login, error: authError } = useAuth();
     
     // Get the redirect path from location state, or default to dashboard
     const from = location.state?.from?.pathname || "/dashboard";
@@ -36,6 +36,7 @@ const Login = () => {
             ...formData,
             [e.target.name]: e.target.value
         });
+        setError(''); // Clear error when user types
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -44,47 +45,17 @@ const Login = () => {
         setIsLoading(true);
 
         try {
-            console.log('Attempting login with:', formData.email);
+            const userRole = await login(formData.email, formData.password);
             
-            const response = await fetch('http://localhost:5001/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formData)
-            });
-
-            const data = await response.json();
-            console.log('Login response data:', data);
-            console.log('Response status:', response.status);
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Failed to login');
-            }
-
-            if (!data.token || !data.user) {
-                throw new Error('Invalid response format');
-            }
-
-            // Store auth data
-            console.log('Storing auth data:', {
-                token: data.token,
-                user: data.user
-            });
-            login(data.token, data.user);
-
             // Navigate based on role
-            if (data.user.role === 'admin') {
-                console.log('User is admin, redirecting to /admin');
+            if (userRole === 'admin') {
                 navigate('/admin');
             } else {
-                console.log('User is not admin, redirecting to /dashboard');
                 navigate('/dashboard');
             }
-
-        } catch (err) {
+        } catch (err: any) {
             console.error('Login error:', err);
-            setError(err instanceof Error ? err.message : 'Failed to login');
+            setError(err.message || 'Failed to login');
         } finally {
             setIsLoading(false);
         }
@@ -117,9 +88,9 @@ const Login = () => {
                         Sign in to continue to Car Sharing
                     </Typography>
 
-                    {error && (
+                    {(error || authError) && (
                         <Alert severity="error" sx={{ mb: 2 }}>
-                            {error}
+                            {error || authError}
                         </Alert>
                     )}
 

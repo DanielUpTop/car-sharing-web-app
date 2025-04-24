@@ -67,6 +67,7 @@ const BookingManagement = () => {
     const { token } = useAuth();
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
     const [openDialog, setOpenDialog] = useState(false);
     const [snackbar, setSnackbar] = useState<SnackbarState>({ open: false, message: '', severity: 'success' });
@@ -180,8 +181,21 @@ const BookingManagement = () => {
         }
     ];
 
+    useEffect(() => {
+        if (token) {
+            fetchBookings();
+        }
+    }, [token]);
+
     const fetchBookings = async () => {
         try {
+            setLoading(true);
+            setError(null);
+            
+            if (!token) {
+                throw new Error('No authentication token found');
+            }
+
             const response = await fetch('http://localhost:5001/api/admin/bookings', {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -190,6 +204,11 @@ const BookingManagement = () => {
             });
 
             if (!response.ok) {
+                if (response.status === 401) {
+                    throw new Error('Authentication failed. Please log in again.');
+                } else if (response.status === 403) {
+                    throw new Error('Access denied. Admin privileges required.');
+                }
                 throw new Error('Failed to fetch bookings');
             }
 
@@ -198,9 +217,11 @@ const BookingManagement = () => {
             setBookings(data);
         } catch (error) {
             console.error('Error fetching bookings:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Failed to load bookings';
+            setError(errorMessage);
             setSnackbar({
                 open: true,
-                message: 'Failed to load bookings',
+                message: errorMessage,
                 severity: 'error'
             });
         } finally {
@@ -305,10 +326,6 @@ const BookingManagement = () => {
             });
         }
     };
-
-    useEffect(() => {
-        fetchBookings();
-    }, [token]);
 
     return (
         <Box sx={{ height: '100%', width: '100%', p: 2 }}>

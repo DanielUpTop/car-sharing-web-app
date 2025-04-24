@@ -14,6 +14,7 @@ import ElectricCarIcon from '@mui/icons-material/ElectricCar';
 import LocalGasStationIcon from '@mui/icons-material/LocalGasStation';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import BookingDialog from '../bookings/BookingDialog';
+import { useNavigate } from 'react-router-dom';
 
 // Create a custom marker icon with your brand color
 const carIcon = L.divIcon({
@@ -53,6 +54,7 @@ interface CarMarkerProps {
 
 const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
     const [openBooking, setOpenBooking] = React.useState(false);
+    const navigate = useNavigate();
 
     const handleOpenBooking = () => {
         setOpenBooking(true);
@@ -143,6 +145,7 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
                     image: car.image,
                     address: car.address
                 }}
+                onBookingComplete={() => navigate('/dashboard/bookings')}
             />
         </>
     );

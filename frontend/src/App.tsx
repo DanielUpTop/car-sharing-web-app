@@ -17,6 +17,13 @@ import ProtectedRoute from './components/auth/ProtectedRoute'
 import Profile from './components/profile/Profile'
 import MapView from './components/map/MapView'
 import MyBookings from './components/bookings/MyBookings'
+import EnhancedProfile from './components/profile/EnhancedProfile'
+import InsuranceView from './components/insurance/InsuranceView'
+import MembershipView from './components/membership/MembershipView'
+import HelpCenter from './components/help/HelpCenter'
+import EnhancedChat from './components/chat/EnhancedChat'
+import AdminChat from './components/admin/AdminChat'
+import PaymentCompletion from './components/payments/PaymentCompletion'
 
 // Admin components
 import AdminLayout from './components/admin/AdminLayout'
@@ -25,22 +32,25 @@ import CarManagement from './components/admin/CarManagement'
 import UserManagement from './components/admin/UserManagement'
 import BookingManagement from './components/admin/BookingManagement'
 import Analytics from './components/admin/Analytics'
+import ChatArchive from './components/admin/chat/ChatArchive'
+import SupportTickets from './components/admin/support/SupportTickets'
 
 // Auth Context
 import { AuthProvider } from './contexts/AuthContext'
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <LocalizationProvider dateAdapter={AdapterDateFns}>
-        <AuthProvider>
-          <Router>
+    <Router>
+      <ThemeProvider theme={theme}>
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+          <AuthProvider>
             <Routes>
               {/* Public routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
+              <Route path="/completion" element={<PaymentCompletion />} />
 
               {/* User routes */}
               <Route path="/dashboard/*" element={
@@ -49,8 +59,12 @@ function App() {
                     <Route index element={<Dashboard />} />
                     <Route path="cars" element={<MapView />} />
                     <Route path="bookings" element={<MyBookings />} />
-                    <Route path="profile" element={<Profile />} />
+                    <Route path="profile" element={<EnhancedProfile />} />
                     <Route path="stats" element={<UserDashboard />} />
+                    <Route path="insurance" element={<InsuranceView />} />
+                    <Route path="membership" element={<MembershipView />} />
+                    <Route path="help" element={<HelpCenter />} />
+                    <Route path="chat" element={<EnhancedChat />} />
                   </Routes>
                 </ProtectedRoute>
               } />
@@ -66,15 +80,18 @@ function App() {
                 <Route path="users" element={<UserManagement />} />
                 <Route path="bookings" element={<BookingManagement />} />
                 <Route path="analytics" element={<Analytics />} />
+                <Route path="chat" element={<AdminChat />} />
+                <Route path="chat-archive" element={<ChatArchive />} />
+                <Route path="tickets" element={<SupportTickets />} />
               </Route>
 
               {/* Catch all route */}
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
-          </Router>
-        </AuthProvider>
-      </LocalizationProvider>
-    </ThemeProvider>
+          </AuthProvider>
+        </LocalizationProvider>
+      </ThemeProvider>
+    </Router>
   )
 }
 

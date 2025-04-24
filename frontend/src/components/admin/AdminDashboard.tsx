@@ -14,13 +14,18 @@ import {
     TableRow,
     Chip,
     CircularProgress,
+    Button,
 } from '@mui/material';
 import {
     DirectionsCar as CarIcon,
     People as UserIcon,
     BookOnline as BookingIcon,
     AttachMoney as RevenueIcon,
+    Chat as ChatIcon,
+    Help as HelpIcon,
+    CardMembership as CardMembershipIcon,
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 
 interface DashboardStats {
     totalUsers: number;
@@ -47,6 +52,7 @@ const AdminDashboard = () => {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const navigate = useNavigate();
 
     useEffect(() => {
         fetchDashboardStats();
@@ -154,6 +160,93 @@ const AdminDashboard = () => {
                         icon={<CarIcon fontSize="large" />}
                         color="#9c27b0"
                     />
+                </Grid>
+
+                {/* Support Management Card */}
+                <Grid item xs={12} md={6}>
+                    <Paper sx={{ p: 2 }}>
+                        <Box display="flex" alignItems="center" mb={2}>
+                            <ChatIcon sx={{ fontSize: 24, color: 'primary.main', mr: 1 }} />
+                            <Typography variant="h6">Support Management</Typography>
+                        </Box>
+                        <Typography variant="body2" color="text.secondary" paragraph>
+                            Manage customer support conversations and inquiries.
+                        </Typography>
+                        <Box display="flex" gap={2}>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                onClick={() => navigate('/admin/chat')}
+                            >
+                                View Support Tickets
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                color="primary"
+                                onClick={() => navigate('/admin/chat/analytics')}
+                            >
+                                Support Analytics
+                            </Button>
+                        </Box>
+                    </Paper>
+                </Grid>
+
+                {/* Membership Management Card */}
+                <Grid item xs={12} md={6}>
+                    <Paper sx={{ p: 2 }}>
+                        <Box display="flex" alignItems="center" mb={2}>
+                            <CardMembershipIcon sx={{ fontSize: 24, color: 'secondary.main', mr: 1 }} />
+                            <Typography variant="h6">Membership Management</Typography>
+                        </Box>
+                        <Typography variant="body2" color="text.secondary" paragraph>
+                            Manage user memberships, types, and subscription statuses.
+                        </Typography>
+                        <Box display="flex" gap={2}>
+                            <Button
+                                variant="contained"
+                                color="secondary"
+                                onClick={() => navigate('/admin/memberships')}
+                            >
+                                Manage Memberships
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                color="secondary"
+                                onClick={() => navigate('/admin/memberships/benefits')}
+                            >
+                                Membership Benefits
+                            </Button>
+                        </Box>
+                    </Paper>
+                </Grid>
+
+                {/* Help Center Management Card */}
+                <Grid item xs={12} md={6}>
+                    <Paper sx={{ p: 2 }}>
+                        <Box display="flex" alignItems="center" mb={2}>
+                            <HelpIcon sx={{ fontSize: 24, color: 'warning.main', mr: 1 }} />
+                            <Typography variant="h6">Help Center Management</Typography>
+                        </Box>
+                        <Typography variant="body2" color="text.secondary" paragraph>
+                            Manage FAQs, help articles, and support resources.
+                        </Typography>
+                        <Box display="flex" gap={2}>
+                            <Button
+                                variant="contained"
+                                color="warning"
+                                onClick={() => navigate('/admin/help/manage')}
+                            >
+                                Manage Content
+                            </Button>
+                            <Button
+                                variant="outlined"
+                                color="warning"
+                                onClick={() => navigate('/admin/help/analytics')}
+                            >
+                                Help Analytics
+                            </Button>
+                        </Box>
+                    </Paper>
                 </Grid>
 
                 {/* Popular Cars Table */}

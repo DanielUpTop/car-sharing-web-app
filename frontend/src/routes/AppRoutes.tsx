@@ -8,6 +8,10 @@ import ProtectedRoute from '../components/auth/ProtectedRoute';
 import MyBookings from '../components/bookings/MyBookings';
 import Profile from '../components/profile/Profile';
 import UserDashboard from '../components/dashboard/UserDashboard';
+import PaymentComplete from '../components/payments/PaymentComplete';
+import MembershipView from '../components/membership/MembershipView';
+import AdminMembership from '../components/admin/membership/AdminMembership';
+import InsuranceView from '../components/insurance/InsuranceView';
 
 const AppRoutes = () => {
     return (
@@ -24,26 +28,46 @@ const AppRoutes = () => {
                 } 
             />
             <Route 
-                path="/cars" 
+                path="/dashboard/cars" 
                 element={
                     <ProtectedRoute>
                         <CarList />
                     </ProtectedRoute>
                 } 
             />
-            <Route path="/bookings" element={
+            <Route path="/dashboard/bookings" element={
                 <ProtectedRoute>
                     <MyBookings />
                 </ProtectedRoute>
             } />
-            <Route path="/profile" element={
+            <Route path="/dashboard/profile" element={
                 <ProtectedRoute>
                     <Profile />
                 </ProtectedRoute>
             } />
-            <Route path="/user-dashboard" element={
+            <Route path="/dashboard/stats" element={
                 <ProtectedRoute>
                     <UserDashboard />
+                </ProtectedRoute>
+            } />
+            <Route path="/dashboard/membership" element={
+                <ProtectedRoute>
+                    <MembershipView />
+                </ProtectedRoute>
+            } />
+            <Route path="/dashboard/insurance" element={
+                <ProtectedRoute>
+                    <InsuranceView />
+                </ProtectedRoute>
+            } />
+            <Route path="/admin/memberships" element={
+                <ProtectedRoute>
+                    <AdminMembership />
+                </ProtectedRoute>
+            } />
+            <Route path="/payment/complete" element={
+                <ProtectedRoute>
+                    <PaymentComplete />
                 </ProtectedRoute>
             } />
         </Routes>
