@@ -2,30 +2,57 @@ const db = require('../config/dbConfig');
 
 class Booking {
     static async createTable() {
-        const query = `
+        const sql = `
             CREATE TABLE IF NOT EXISTS bookings (
-                id INT AUTO_INCREMENT,
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
                 car_id INT NOT NULL,
                 start_date DATETIME NOT NULL,
                 end_date DATETIME NOT NULL,
                 status ENUM('pending', 'confirmed', 'completed', 'cancelled') DEFAULT 'pending',
                 total_price DECIMAL(10,2) NOT NULL,
+                payment_session_id VARCHAR(255) DEFAULT NULL,
+                payment_status ENUM('pending', 'paid', 'failed', 'cancelled', 'refunded') DEFAULT 'pending',
+                payment_method VARCHAR(50) DEFAULT NULL,
+                payment_date TIMESTAMP NULL DEFAULT NULL,
+                refund_amount DECIMAL(10,2) DEFAULT NULL,
+                refund_date TIMESTAMP NULL DEFAULT NULL,
+                stripe_customer_id VARCHAR(255) DEFAULT NULL,
+                stripe_payment_intent_id VARCHAR(255) DEFAULT NULL,
+                priority INT DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                PRIMARY KEY (id),
                 FOREIGN KEY (user_id) REFERENCES users(id),
-                FOREIGN KEY (car_id) REFERENCES cars(id)
+                FOREIGN KEY (car_id) REFERENCES cars(id),
+                INDEX idx_booking_dates (car_id, start_date, end_date),
+                INDEX idx_user_bookings (user_id, status),
+                INDEX idx_payment_session (payment_session_id),
+                INDEX idx_payment_status (payment_status),
+                INDEX idx_payment_date (payment_date),
+                INDEX idx_priority (priority)
             )
         `;
+        await db.query(sql);
         
-        try {
-            await db.query(query);
-            console.log('Bookings table created successfully');
-        } catch (error) {
-            console.error('Error creating bookings table:', error);
-            throw error;
-        }
+        // Create booking_discounts table for storing membership discounts
+        await this.createBookingDiscountsTable();
+    }
+    
+    static async createBookingDiscountsTable() {
+        const sql = `
+            CREATE TABLE IF NOT EXISTS booking_discounts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                booking_id INT NOT NULL,
+                original_price DECIMAL(10,2) NOT NULL,
+                discounted_price DECIMAL(10,2) NOT NULL,
+                discount_percentage INT NOT NULL,
+                membership_type ENUM('basic', 'premium', 'platinum') NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE,
+                INDEX idx_booking_id (booking_id)
+            )
+        `;
+        await db.query(sql);
     }
 
     static async create(bookingData) {

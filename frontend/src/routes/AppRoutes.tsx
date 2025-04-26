@@ -10,8 +10,11 @@ import Profile from '../components/profile/Profile';
 import UserDashboard from '../components/dashboard/UserDashboard';
 import PaymentComplete from '../components/payments/PaymentComplete';
 import MembershipView from '../components/membership/MembershipView';
-import AdminMembership from '../components/admin/membership/AdminMembership';
 import InsuranceView from '../components/insurance/InsuranceView';
+import AdminLayout from '../components/admin/AdminLayout';
+import AdminDashboard from '../components/admin/AdminDashboard';
+import MembershipManagement from '../components/admin/MembershipManagement';
+import SupportTickets from '../components/admin/support/SupportTickets';
 
 const AppRoutes = () => {
     return (
@@ -21,55 +24,59 @@ const AppRoutes = () => {
             <Route path="/register" element={<Register />} />
             <Route 
                 path="/dashboard" 
-                element={
-                    <ProtectedRoute>
-                        <Dashboard />
-                    </ProtectedRoute>
-                } 
+                element={<ProtectedRoute><Dashboard /></ProtectedRoute>}
             />
             <Route 
                 path="/dashboard/cars" 
-                element={
-                    <ProtectedRoute>
-                        <CarList />
-                    </ProtectedRoute>
-                } 
+                element={<ProtectedRoute><CarList /></ProtectedRoute>}
             />
-            <Route path="/dashboard/bookings" element={
-                <ProtectedRoute>
-                    <MyBookings />
-                </ProtectedRoute>
-            } />
-            <Route path="/dashboard/profile" element={
-                <ProtectedRoute>
-                    <Profile />
-                </ProtectedRoute>
-            } />
-            <Route path="/dashboard/stats" element={
-                <ProtectedRoute>
-                    <UserDashboard />
-                </ProtectedRoute>
-            } />
-            <Route path="/dashboard/membership" element={
-                <ProtectedRoute>
-                    <MembershipView />
-                </ProtectedRoute>
-            } />
-            <Route path="/dashboard/insurance" element={
-                <ProtectedRoute>
-                    <InsuranceView />
-                </ProtectedRoute>
-            } />
-            <Route path="/admin/memberships" element={
-                <ProtectedRoute>
-                    <AdminMembership />
-                </ProtectedRoute>
-            } />
-            <Route path="/payment/complete" element={
-                <ProtectedRoute>
-                    <PaymentComplete />
-                </ProtectedRoute>
-            } />
+            <Route 
+                path="/dashboard/bookings" 
+                element={<ProtectedRoute><MyBookings /></ProtectedRoute>}
+            />
+            <Route 
+                path="/dashboard/profile" 
+                element={<ProtectedRoute><Profile /></ProtectedRoute>}
+            />
+            <Route 
+                path="/dashboard/stats" 
+                element={<ProtectedRoute><UserDashboard /></ProtectedRoute>}
+            />
+            <Route 
+                path="/dashboard/membership" 
+                element={<ProtectedRoute><MembershipView /></ProtectedRoute>}
+            />
+            <Route 
+                path="/dashboard/insurance" 
+                element={<ProtectedRoute><InsuranceView /></ProtectedRoute>}
+            />
+            <Route 
+                path="/payment/complete" 
+                element={<ProtectedRoute><PaymentComplete /></ProtectedRoute>}
+            />
+            
+            {/* Routes managed by AdminLayout */}
+            <Route 
+                path="/admin" 
+                element={<AdminLayout />}
+            >
+                <Route 
+                    index 
+                    element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} 
+                />
+                <Route 
+                    path="memberships" 
+                    element={<ProtectedRoute allowedRoles={["admin"]}><SupportTickets /></ProtectedRoute>}
+                />
+                <Route 
+                    path="members" 
+                    element={<ProtectedRoute allowedRoles={["admin"]}><MembershipManagement /></ProtectedRoute>}
+                />
+                <Route 
+                    path="tickets" 
+                    element={<ProtectedRoute allowedRoles={["admin"]}><SupportTickets /></ProtectedRoute>} 
+                />
+            </Route>
         </Routes>
     );
 };

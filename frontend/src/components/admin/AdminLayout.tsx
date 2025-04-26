@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { useNavigate, useLocation, Outlet, Navigate } from 'react-router-dom';
 import {
     Box,
     Drawer,
@@ -16,6 +16,8 @@ import {
     Avatar,
     Menu,
     MenuItem,
+    CircularProgress,
+    Alert,
 } from '@mui/material';
 import {
     Menu as MenuIcon,
@@ -30,6 +32,9 @@ import {
     Logout as LogoutIcon,
     ChatBubble as ChatIcon,
     ConfirmationNumber as TicketIcon,
+    CardMembership as CardMembershipIcon,
+    Security as SecurityIcon,
+    Warning as WarningIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -41,7 +46,7 @@ const AdminLayout = () => {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const navigate = useNavigate();
     const location = useLocation();
-    const { user, logout } = useAuth();
+    const { user, logout, loading } = useAuth();
 
     const handleDrawerToggle = () => {
         setOpen(!open);
@@ -69,11 +74,49 @@ const AdminLayout = () => {
         { text: 'Car Management', icon: <CarIcon />, path: '/admin/cars' },
         { text: 'User Management', icon: <PeopleIcon />, path: '/admin/users' },
         { text: 'Booking Management', icon: <BookingIcon />, path: '/admin/bookings' },
+        { text: 'Membership Management', icon: <CardMembershipIcon />, path: '/admin/members' },
+        { text: 'Insurance Management', icon: <SecurityIcon />, path: '/admin/insurance' },
         { text: 'Analytics', icon: <AnalyticsIcon />, path: '/admin/analytics' },
         { text: 'Live Chat Archive', icon: <ChatIcon />, path: '/admin/chat-archive' },
         { text: 'Support Tickets', icon: <TicketIcon />, path: '/admin/tickets' },
     ];
 
+    if (loading) {
+        return (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+                <CircularProgress />
+            </Box>
+        );
+    }
+
+    if (!user) {
+        console.error("[AdminLayout] No user found after loading. Redirecting to login.");
+        return <Navigate to="/login" replace />;
+    }
+
+    if (user && user.role !== 'admin') {
+        console.warn(`[AdminLayout] User role '${user.role}' is not authorized for admin area.`);
+        return (
+             <Box sx={{ display: 'flex', height: '100vh' }}>
+                <AppBar position="fixed" sx={{ zIndex: theme.zIndex.drawer + 1 }}>
+                     <Toolbar>
+                         <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
+                             Car Sharing Admin - Unauthorized
+                         </Typography>
+                        <IconButton color="inherit" onClick={handleLogout} title="Logout">
+                            <LogoutIcon />
+                         </IconButton>
+                     </Toolbar>
+                 </AppBar>
+                 <Box component="main" sx={{ flexGrow: 1, p: 3, mt: '64px' }}>
+                    <Alert severity="error" icon={<WarningIcon />}>
+                        You do not have permission to access this area. Your role is '{user.role}'.
+                    </Alert>
+                 </Box>
+            </Box>
+        );
+    }
+    
     return (
         <Box sx={{ display: 'flex', height: '100vh' }}>
             <AppBar
@@ -153,7 +196,7 @@ const AdminLayout = () => {
                             key={item.text}
                             onClick={() => {
                                 navigate(item.path);
-                                handleDrawerToggle();
+                                // handleDrawerToggle(); // Temporarily comment out drawer toggle
                             }}
                             selected={location.pathname === item.path}
                             sx={{
@@ -173,10 +216,10 @@ const AdminLayout = () => {
                 component="main"
                 sx={{
                     flexGrow: 1,
-                    width: '100%',
-                    height: `calc(100vh - ${theme.mixins.toolbar.minHeight}px)`,
-                    marginTop: `${theme.mixins.toolbar.minHeight}px`,
-                    overflow: 'hidden'
+                    p: 3,
+                    width: { sm: `calc(100% - ${drawerWidth}px)` },
+                    mt: '64px',
+                    overflow: 'auto'
                 }}
             >
                 <Outlet />

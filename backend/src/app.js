@@ -17,6 +17,7 @@ const adminChatRoutes = require('./routes/adminChatRoutes');
 const supportTicketsRoutes = require('./routes/supportTicketsRoutes');
 const insuranceRoutes = require('./routes/insuranceRoutes');
 const membershipRoutes = require('./routes/membershipRoutes');
+const helpRoutes = require('./routes/helpRoutes');
 
 const app = express();
 
@@ -36,7 +37,14 @@ app.use(
                 styleSrc: ["'self'", "'unsafe-inline'", "https://*.stripe.com"],
                 frameSrc: ["'self'", "https://*.stripe.com"],
                 imgSrc: ["'self'", "https://*.stripe.com", "data:", "https:"],
-                connectSrc: ["'self'", "https://*.stripe.com"],
+                connectSrc: [
+                    "'self'", 
+                    "https://*.stripe.com",
+                    "ws://localhost:*",
+                    "wss://localhost:*",
+                    "http://localhost:*",
+                    "https://localhost:*"
+                ],
             }
         }
     })
@@ -72,6 +80,7 @@ app.use('/api/chat/admin', adminChatRoutes);
 app.use('/api/support/tickets', supportTicketsRoutes);
 app.use('/api/insurance', insuranceRoutes);
 app.use('/api/memberships', membershipRoutes);
+app.use('/api/help', helpRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

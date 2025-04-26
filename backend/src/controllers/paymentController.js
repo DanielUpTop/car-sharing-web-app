@@ -1,6 +1,8 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const pool = require('../config/database');
 const logger = require('../utils/logger');
+const Membership = require('../models/membershipModel');
+const MembershipUtils = require('../utils/membershipUtils');
 
 // Renamed function to match route usage
 const createPaymentIntent = async (req, res) => {
@@ -12,8 +14,21 @@ const createPaymentIntent = async (req, res) => {
 
         if (!amount || !carId || !startDate || !endDate) {
             console.log('[PaymentController] Missing required fields');
-            return res.status(400).json({ message: 'Missing required fields' });
+            return res.status(400).json({ error: 'Missing required fields' });
         }
+
+        // Check if user has an active membership and apply discount
+        const membership = await Membership.getUserMembership(userId);
+        let finalAmount = amount;
+        
+        if (membership) {
+            // Apply membership discount to amount
+            finalAmount = MembershipUtils.applyPriceDiscount(amount, membership);
+            console.log(`Applied ${membership.type} membership discount. Original: ${amount}, Discounted: ${finalAmount}`);
+        }
+
+        // Convert amount to cents (Stripe requires amount in smallest currency unit)
+        const amountInCents = Math.round(finalAmount * 100);
 
         // Format dates for Stripe metadata (ISO string format)
         const formattedStartDate = new Date(startDate).toISOString();
@@ -29,27 +44,37 @@ const createPaymentIntent = async (req, res) => {
         console.log('[PaymentController] Attempting to create Stripe Payment Intent...');
         // Create payment intent
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: Math.round(amount * 100), // Convert to pence
+            amount: amountInCents,
             currency: 'gbp',
-            payment_method_types: ['card'],
+            automatic_payment_methods: {
+                enabled: true,
+            },
             metadata: {
-                userId: userId.toString(),
-                carId: carId.toString(),
-                startDate: formattedStartDate,
-                endDate: formattedEndDate
+                user_id: userId.toString(),
+                car_id: carId,
+                start_date: startDate,
+                end_date: endDate,
+                original_amount: amount.toString(),
+                discounted_amount: finalAmount.toString(),
+                has_membership: membership ? 'true' : 'false',
+                membership_type: membership ? membership.type : 'none'
             }
         });
         console.log('[PaymentController] Stripe Payment Intent created successfully:', paymentIntent.id);
 
         console.log('[PaymentController] Sending clientSecret back to frontend.');
-        res.json({
-            clientSecret: paymentIntent.client_secret
+        res.status(200).json({
+            clientSecret: paymentIntent.client_secret,
+            originalAmount: amount,
+            discountedAmount: finalAmount,
+            hasMembership: !!membership,
+            membershipType: membership ? membership.type : null
         });
         console.log('[PaymentController] Response sent.');
     } catch (error) {
         console.error('[PaymentController] Error caught in createPaymentIntent:', error);
         logger.error('Error creating payment intent:', error);
-        res.status(500).json({ message: 'Error creating payment intent', error: error.message || 'Unknown error' });
+        res.status(500).json({ error: 'Error creating payment intent' });
     }
 };
 

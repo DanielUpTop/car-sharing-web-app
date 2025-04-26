@@ -19,6 +19,7 @@ import {
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { API_URL } from '../../config/config';
 
 interface Message {
     id: number;
@@ -60,6 +61,7 @@ const Chat: React.FC = () => {
             }
             
             console.log('Attempting to connect to WebSocket...');
+            // Important: Fixed WebSocket URL to match exactly what the backend expects
             ws.current = new WebSocket('ws://localhost:5001/ws/chat');
             console.log('WebSocket object created. Initial readyState:', ws.current?.readyState);
 
@@ -176,6 +178,15 @@ const Chat: React.FC = () => {
         scrollToBottom();
     }, [messages]); // This is CORRECTLY placed outside the main useEffect
 
+    // Add a debug function to check message state
+    useEffect(() => {
+        // Debug logging for messages array
+        if (messages.length > 0) {
+            console.log('Current messages:', messages.length);
+            console.log('Last message:', messages[messages.length - 1]);
+        }
+    }, [messages]);
+
     const loadChatHistory = async () => {
         // Reset states at the beginning of the load attempt
         setIsLoading(true); 
@@ -273,10 +284,28 @@ const Chat: React.FC = () => {
         }
 
         try {
+            const messageContent = newMessage.trim();
+            setNewMessage('');
+            
+            // Create a message object for the UI
+            const userMessage: Message = {
+                id: Date.now(),
+                content: messageContent,
+                senderId: user?.id || 0,
+                senderName: `${user?.first_name || ''} ${user?.last_name || ''}`,
+                timestamp: new Date().toISOString(),
+                isAdmin: false
+            };
+            
+            // Add user message to UI immediately
+            setMessages(prevMessages => [...prevMessages, userMessage]);
+            scrollToBottom();
+            
+            // Send the message via WebSocket
             const messageToSend = {
                 type: 'message',
                 message: {
-                    content: newMessage.trim(),
+                    content: messageContent,
                     senderId: user?.id,
                     senderName: `${user?.first_name} ${user?.last_name}`,
                     timestamp: new Date().toISOString(),
@@ -286,7 +315,26 @@ const Chat: React.FC = () => {
             console.log('Sending message via WebSocket:', messageToSend);
             ws.current.send(JSON.stringify(messageToSend));
             
-            setNewMessage('');
+            // Add system message after a short delay
+            setTimeout(() => {
+                console.log('Adding system message...');
+                const systemMessage: Message = {
+                    id: Date.now() + 1000, // Ensure unique ID
+                    content: "The admin team will get back to you as soon as possible",
+                    senderId: 0,
+                    senderName: "System",
+                    timestamp: new Date().toISOString(),
+                    isAdmin: true
+                };
+                console.log('System message:', systemMessage);
+                setMessages(prevMessages => {
+                    console.log('Previous messages before adding system:', prevMessages.length);
+                    const newMessages = [...prevMessages, systemMessage];
+                    console.log('New messages after adding system:', newMessages.length);
+                    return newMessages;
+                });
+                scrollToBottom();
+            }, 1000);
 
             // Also send via REST API as fallback (optional, keep if needed)
             try {
@@ -297,7 +345,7 @@ const Chat: React.FC = () => {
                         'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({
-                        content: newMessage.trim(),
+                        content: messageContent,
                         userId: user?.id,
                         userName: `${user?.first_name} ${user?.last_name}`
                     })
@@ -373,8 +421,43 @@ const Chat: React.FC = () => {
                 backgroundSize: '20px 20px'
             }}>
                 {isLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                        <CircularProgress sx={{ color: '#1976d2' }} />
+                    <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                        <CircularProgress sx={{ color: '#1976d2', mb: 3 }} />
+                        <Typography variant="body1" sx={{ mb: 2 }}>Connecting to chat service...</Typography>
+                        <Button 
+                            variant="contained" 
+                            color="primary"
+                            onClick={() => {
+                                // Force reload with explicit error handling
+                                setError(null);
+                                loadChatHistory();
+                                
+                                // Force WebSocket reconnection
+                                if (ws.current) {
+                                    ws.current.close();
+                                }
+                                
+                                // Try to set up WebSocket again
+                                const wsUrl = 'ws://localhost:5001/ws/chat';
+                                ws.current = new WebSocket(wsUrl);
+                                
+                                // Basic handlers
+                                ws.current.onopen = () => {
+                                    setIsWsConnected(true);
+                                    setIsLoading(false);
+                                    if (token) {
+                                        ws.current?.send(JSON.stringify({ type: 'auth', token }));
+                                    }
+                                };
+                                
+                                ws.current.onerror = () => {
+                                    setError('Unable to connect to chat service. Try again later.');
+                                    setIsLoading(false);
+                                };
+                            }}
+                        >
+                            Reconnect
+                        </Button>
                     </Box>
                 ) : error ? (
                     <Box sx={{ 
@@ -412,6 +495,36 @@ const Chat: React.FC = () => {
                             </Box>
                         )}
                         {messages.map((message) => (
+                            message.senderId === 0 ? (
+                                // Special System Message Component
+                                <Box
+                                    key={message.id}
+                                    sx={{
+                                        width: '100%',
+                                        my: 2,
+                                        display: 'flex',
+                                        justifyContent: 'center'
+                                    }}
+                                >
+                                    <Paper
+                                        elevation={1}
+                                        sx={{
+                                            p: 2,
+                                            bgcolor: '#e8f5e9',
+                                            border: '1px dashed #4caf50',
+                                            borderRadius: 2,
+                                            textAlign: 'center',
+                                            maxWidth: '80%',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                                        }}
+                                    >
+                                        <Typography variant="body2" fontStyle="italic" color="text.secondary">
+                                            {message.content}
+                                        </Typography>
+                                    </Paper>
+                                </Box>
+                            ) : (
+                                // Regular User/Admin Message
                             <Box
                                 key={message.id}
                                 sx={{
@@ -432,22 +545,24 @@ const Chat: React.FC = () => {
                                         sx={{ 
                                             width: 32, 
                                             height: 32,
-                                            bgcolor: message.isAdmin ? '#1976d2' : '#8bc34a',
+                                                bgcolor: message.senderId === 0 ? '#4caf50' : (message.isAdmin ? '#1976d2' : '#8bc34a'),
                                             fontSize: '0.875rem',
                                             mt: 0.5
                                 }}
                             >
-                                        {message.isAdmin ? 'S' : user?.first_name?.charAt(0) || 'U'}
+                                            {message.senderId === 0 ? 'S' : (message.isAdmin ? 'S' : user?.first_name?.charAt(0) || 'U')}
                                     </Avatar>
                                 <Paper
                                     elevation={1}
                                     sx={{
                                         p: 2,
-                                            bgcolor: message.isAdmin ? 'white' : '#e3f2fd',
+                                                bgcolor: message.senderId === 0 ? '#e8f5e9' : (message.isAdmin ? 'white' : '#e3f2fd'),
                                             color: 'text.primary',
                                             borderRadius: 2,
                                             boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
                                             position: 'relative',
+                                                fontStyle: message.senderId === 0 ? 'italic' : 'normal',
+                                                width: message.senderId === 0 ? '100%' : 'auto',
                                             '&::before': message.isAdmin ? {
                                                 content: '""',
                                                 position: 'absolute',
@@ -455,7 +570,7 @@ const Chat: React.FC = () => {
                                                 left: -8,
                                                 borderStyle: 'solid',
                                                 borderWidth: '8px 8px 8px 0',
-                                                borderColor: 'transparent white transparent transparent',
+                                                    borderColor: `transparent ${message.senderId === 0 ? '#e8f5e9' : 'white'} transparent transparent`,
                                             } : {
                                                 content: '""',
                                                 position: 'absolute',
@@ -487,6 +602,7 @@ const Chat: React.FC = () => {
                                     {message.timestamp && format(new Date(message.timestamp), 'MMM d, h:mm a')}
                                 </Typography>
                             </Box>
+                            )
                         ))}
                         <div ref={messagesEndRef} />
                     </>

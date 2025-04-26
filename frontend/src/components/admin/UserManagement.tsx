@@ -66,7 +66,8 @@ const initialFormData: UserFormData = {
 };
 
 const UserManagement = () => {
-    const { token } = useAuth();
+    const { } = useAuth();
+    const [token, setToken] = useState(localStorage.getItem('token'));
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [openDialog, setOpenDialog] = useState(false);
@@ -75,10 +76,8 @@ const UserManagement = () => {
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
     useEffect(() => {
-        if (token) {
-            fetchUsers();
-        }
-    }, [token]);
+        fetchUsers();
+    }, []);
 
     const fetchUsers = async () => {
         try {

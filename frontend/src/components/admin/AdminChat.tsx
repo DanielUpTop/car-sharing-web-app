@@ -91,7 +91,7 @@ const AdminChat: React.FC = () => {
     }, [selectedUser]);
 
     const setupWebSocket = () => {
-        ws.current = new WebSocket(`${import.meta.env.VITE_WS_URL || 'ws://localhost:8000'}/ws/admin/chat`);
+        ws.current = new WebSocket(`ws://localhost:5001/ws/admin-chat`);
 
         ws.current.onopen = () => {
             console.log('WebSocket connected');

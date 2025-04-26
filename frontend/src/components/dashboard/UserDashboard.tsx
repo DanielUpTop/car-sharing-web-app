@@ -54,6 +54,15 @@ interface CarTypeStats {
     bookings: number;
 }
 
+interface Membership {
+    id: number;
+    type: 'basic' | 'premium' | 'platinum';
+    start_date: string;
+    end_date: string | null;
+    status: 'active' | 'expired' | 'cancelled';
+    benefits: any[];
+}
+
 interface DashboardStats {
     totalBookings: number;
     activeBookings: number;
@@ -113,10 +122,13 @@ const UserDashboard = () => {
     const [timeRange, setTimeRange] = useState('6months');
     const [startDate, setStartDate] = useState<Date | null>(subMonths(new Date(), 6));
     const [endDate, setEndDate] = useState<Date | null>(new Date());
+    const [membership, setMembership] = useState<Membership | null>(null);
+    const [membershipLoading, setMembershipLoading] = useState(true);
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchDashboardStats();
+        fetchMembership();
     }, [timeRange, startDate, endDate]);
 
     const fetchDashboardStats = async () => {
@@ -166,6 +178,45 @@ const UserDashboard = () => {
         }
     };
 
+    const fetchMembership = async () => {
+        try {
+            setMembershipLoading(true);
+            const token = localStorage.getItem('token');
+            
+            if (!token) {
+                navigate('/login');
+                return;
+            }
+
+            const response = await fetch(
+                `${import.meta.env.VITE_API_URL}/api/memberships`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                }
+            );
+
+            if (response.status === 404) {
+                // User doesn't have a membership
+                setMembership(null);
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch membership data');
+            }
+
+            const data = await response.json();
+            setMembership(data);
+        } catch (err) {
+            console.error('Error fetching membership:', err);
+            // Don't show error for membership to avoid cluttering the dashboard
+        } finally {
+            setMembershipLoading(false);
+        }
+    };
+
     const exportDashboardData = () => {
         if (!stats) return;
         
@@ -192,6 +243,49 @@ const UserDashboard = () => {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
+    };
+
+    const goToMembershipPage = () => {
+        navigate('/membership');
+    };
+
+    const getBenefitsList = (type: string) => {
+        switch (type) {
+            case 'basic':
+                return [
+                    '5% discount on rentals',
+                    'Basic insurance coverage'
+                ];
+            case 'premium':
+                return [
+                    '10% discount on rentals',
+                    'Enhanced insurance coverage',
+                    'Priority booking',
+                    '24/7 customer support'
+                ];
+            case 'platinum':
+                return [
+                    '15% discount on rentals',
+                    'Premium insurance coverage',
+                    'VIP booking priority',
+                    'Dedicated customer support'
+                ];
+            default:
+                return [];
+        }
+    };
+
+    const getMembershipColor = (type: string | undefined) => {
+        switch (type) {
+            case 'basic':
+                return '#757575';
+            case 'premium':
+                return '#1976d2';
+            case 'platinum':
+                return '#ffd700';
+            default:
+                return '#757575';
+        }
     };
 
     if (isLoading) {
@@ -244,7 +338,7 @@ const UserDashboard = () => {
     }
 
     return (
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
             <AppBar position="fixed">
                 <Toolbar>
                     <IconButton
@@ -313,6 +407,91 @@ const UserDashboard = () => {
                         </>
                     )}
                 </Grid>
+            </Paper>
+
+            {/* Membership Status Card */}
+            <Paper
+                elevation={3}
+                sx={{
+                    p: 3,
+                    mb: 4,
+                    borderRadius: 2,
+                    border: membership ? `1px solid ${getMembershipColor(membership.type)}` : 'none',
+                    boxShadow: membership?.type === 'platinum' ? '0 0 10px rgba(255, 215, 0, 0.5)' : 'none'
+                }}
+            >
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="h5" fontWeight="bold">
+                        Your Membership
+                    </Typography>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={() => navigate('/dashboard/membership')}
+                        sx={{ borderRadius: 2 }}
+                    >
+                        View Membership
+                    </Button>
+                </Box>
+
+                {membershipLoading ? (
+                    <Box display="flex" justifyContent="center" py={3}>
+                        <CircularProgress />
+                    </Box>
+                ) : !membership ? (
+                    <Box py={3}>
+                        <Typography variant="body1" gutterBottom>
+                            You are currently not a member.
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            Join our membership program to enjoy discounts, priority booking, and more!
+                        </Typography>
+                    </Box>
+                ) : (
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} md={4}>
+                            <Box display="flex" alignItems="center" mb={1}>
+                                <Box
+                                    component="span"
+                                    sx={{
+                                        display: 'inline-block',
+                                        width: 16,
+                                        height: 16,
+                                        borderRadius: '50%',
+                                        backgroundColor: getMembershipColor(membership.type),
+                                        mr: 1
+                                    }}
+                                />
+                                <Typography variant="h6" fontWeight="bold">
+                                    {membership.type.charAt(0).toUpperCase() + membership.type.slice(1)} Member
+                                </Typography>
+                            </Box>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                                Active since: {format(new Date(membership.start_date), 'PPP')}
+                            </Typography>
+                            {membership.end_date && (
+                                <Typography variant="body2" color="text.secondary">
+                                    Expires: {format(new Date(membership.end_date), 'PPP')}
+                                </Typography>
+                            )}
+                        </Grid>
+                        <Grid item xs={12} md={8}>
+                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                Your Benefits:
+                            </Typography>
+                            <Grid container spacing={1}>
+                                {getBenefitsList(membership.type).map((benefit, index) => (
+                                    <Grid item xs={12} md={6} key={index}>
+                                        <Box display="flex" alignItems="center">
+                                            <CompletedIcon color="success" fontSize="small" sx={{ mr: 1 }} />
+                                            <Typography variant="body2">{benefit}</Typography>
+                                        </Box>
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                )}
             </Paper>
 
             <Grid container spacing={3}>

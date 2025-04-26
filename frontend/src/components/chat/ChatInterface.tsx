@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { Message, Conversation } from './types';
 import ConversationList from './ConversationList';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
+import { AppBar, Toolbar, IconButton, Typography, Box } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ChatIcon from '@mui/icons-material/Chat';
+import { useNavigate } from 'react-router-dom';
 
 const ChatInterface: React.FC = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -148,42 +153,64 @@ const ChatInterface: React.FC = () => {
     }
 
     return (
-        <div className="flex h-[calc(100vh-64px)]">
-            <ConversationList
-                conversations={conversations}
-                selectedConversation={selectedConversation}
-                onSelectConversation={setSelectedConversation}
-                onNewConversation={handleNewConversation}
-            />
-            
-            <div className="flex-1 flex flex-col bg-gray-50">
-                {selectedConversation ? (
-                    <>
-                        <div className="p-4 border-b border-gray-200 bg-white">
-                            <h2 className="text-lg font-semibold">{selectedConversation.subject}</h2>
-                            <span className="text-sm text-gray-500">
-                                Status: {selectedConversation.status}
-                            </span>
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+            <AppBar position="static">
+                <Toolbar>
+                    <IconButton
+                        edge="start"
+                        color="inherit"
+                        onClick={() => navigate(-1)}
+                        sx={{ mr: 2 }}
+                        aria-label="Back"
+                    >
+                        <ArrowBackIcon />
+                    </IconButton>
+                    <Box display="flex" alignItems="center" sx={{ flexGrow: 1 }}>
+                        <ChatIcon sx={{ mr: 1.5 }} />
+                        <Typography variant="h6" component="div">
+                            Live Chat
+                        </Typography>
+                    </Box>
+                </Toolbar>
+            </AppBar>
+
+            <div className="flex flex-grow">
+                <ConversationList
+                    conversations={conversations}
+                    selectedConversation={selectedConversation}
+                    onSelectConversation={setSelectedConversation}
+                    onNewConversation={handleNewConversation}
+                />
+                
+                <div className="flex-1 flex flex-col bg-gray-50">
+                    {selectedConversation ? (
+                        <>
+                            <div className="p-4 border-b border-gray-200 bg-white">
+                                <h2 className="text-lg font-semibold">{selectedConversation.subject}</h2>
+                                <span className="text-sm text-gray-500">
+                                    Status: {selectedConversation.status}
+                                </span>
+                            </div>
+
+                            <MessageList
+                                messages={messages}
+                                currentUserId={user.id}
+                                onRetryMessage={handleRetryMessage}
+                            />
+
+                            <MessageInput
+                                onSendMessage={handleSendMessage}
+                                disabled={loading || selectedConversation.status !== 'open'}
+                            />
+                        </>
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center text-gray-500">
+                            Select a conversation or start a new one
                         </div>
-
-                        <MessageList
-                            messages={messages}
-                            currentUserId={user.id}
-                            onRetryMessage={handleRetryMessage}
-                        />
-
-                        <MessageInput
-                            onSendMessage={handleSendMessage}
-                            disabled={loading || selectedConversation.status !== 'open'}
-                        />
-                    </>
-                ) : (
-                    <div className="flex-1 flex items-center justify-center text-gray-500">
-                        Select a conversation or start a new one
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
-        </div>
+        </Box>
     );
 };
 

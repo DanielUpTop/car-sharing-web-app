@@ -50,11 +50,25 @@ interface Booking {
         registration_number: string;
         address: string;
     };
+    membership?: {
+        type: 'basic' | 'premium' | 'platinum' | null;
+        discount_percentage?: number;
+        original_price?: number;
+        discounted_price?: number;
+    };
+    priority?: number;
 }
 
 interface BookingDetails extends Booking {
     payment_status?: string;
     notes?: string;
+    membership?: {
+        type: 'basic' | 'premium' | 'platinum' | null;
+        discount_percentage?: number;
+        original_price?: number;
+        discounted_price?: number;
+    };
+    priority?: number;
 }
 
 interface SnackbarState {
@@ -64,7 +78,8 @@ interface SnackbarState {
 }
 
 const BookingManagement = () => {
-    const { token } = useAuth();
+    const { } = useAuth();
+    const [token, setToken] = useState(localStorage.getItem('token'));
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -182,10 +197,8 @@ const BookingManagement = () => {
     ];
 
     useEffect(() => {
-        if (token) {
-            fetchBookings();
-        }
-    }, [token]);
+        fetchBookings();
+    }, []);
 
     const fetchBookings = async () => {
         try {
@@ -361,7 +374,10 @@ const BookingManagement = () => {
                 <DialogContent>
                     {selectedBooking && (
                         <Box sx={{ mt: 2 }}>
-                            <Paper sx={{ p: 2 }}>
+                            <Paper sx={{ p: 2, mb: 3 }}>
+                                <Typography variant="h6" gutterBottom>
+                                    Booking Information
+                                </Typography>
                                 <Table>
                                     <TableBody>
                                         <TableRow>
@@ -415,7 +431,9 @@ const BookingManagement = () => {
                                                 Total Price
                                             </TableCell>
                                             <TableCell>
-                                                {`£${Number(selectedBooking.total_price).toFixed(2)}`}
+                                                {`£${typeof selectedBooking.total_price === 'number' 
+                                                    ? selectedBooking.total_price.toFixed(2) 
+                                                    : Number(selectedBooking.total_price).toFixed(2)}`}
                                             </TableCell>
                                         </TableRow>
                                         <TableRow>
@@ -439,6 +457,78 @@ const BookingManagement = () => {
                                             </TableCell>
                                             <TableCell>
                                                 {format(new Date(selectedBooking.created_at), 'PPP p')}
+                                            </TableCell>
+                                        </TableRow>
+                                        {selectedBooking.membership && selectedBooking.membership.type && (
+                                            <>
+                                                <TableRow>
+                                                    <TableCell component="th" sx={{ fontWeight: 'bold' }}>
+                                                        Membership Status
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Chip
+                                                            label={selectedBooking.membership.type.toUpperCase()}
+                                                            color={
+                                                                selectedBooking.membership.type === 'platinum' ? 'warning' :
+                                                                selectedBooking.membership.type === 'premium' ? 'secondary' : 'primary'
+                                                            }
+                                                            size="small"
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                                
+                                                {selectedBooking.membership.original_price && selectedBooking.membership.original_price > selectedBooking.total_price && (
+                                                    <>
+                                                        <TableRow>
+                                                            <TableCell component="th" sx={{ fontWeight: 'bold' }}>
+                                                                Original Price
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Typography sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
+                                                                    £{selectedBooking.membership.original_price.toFixed(2)}
+                                                                </Typography>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                        <TableRow>
+                                                            <TableCell component="th" sx={{ fontWeight: 'bold' }}>
+                                                                Discount Applied
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Typography color="success.main" fontWeight="bold">
+                                                                    {selectedBooking.membership.discount_percentage}% ({selectedBooking.membership.type} membership)
+                                                                </Typography>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    </>
+                                                )}
+                                            </>
+                                        )}
+                                        
+                                        {selectedBooking.priority && selectedBooking.priority > 0 && (
+                                            <TableRow>
+                                                <TableCell component="th" sx={{ fontWeight: 'bold' }}>
+                                                    Booking Priority
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Chip
+                                                        label={selectedBooking.priority === 2 ? 'VIP Priority' : 'Priority'}
+                                                        color={selectedBooking.priority === 2 ? 'warning' : 'info'}
+                                                        size="small"
+                                                    />
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                        
+                                        <TableRow>
+                                            <TableCell component="th" sx={{ fontWeight: 'bold' }}>
+                                                Final Price
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography fontWeight="bold" color="primary.main">
+                                                    £{typeof selectedBooking.total_price === 'number' 
+                                                        ? selectedBooking.total_price.toFixed(2) 
+                                                        : Number(selectedBooking.total_price).toFixed(2)}
+                                                </Typography>
                                             </TableCell>
                                         </TableRow>
                                     </TableBody>

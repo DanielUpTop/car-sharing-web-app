@@ -17,31 +17,40 @@ const validateInsurancePolicy = (req, res, next) => {
     next();
 };
 
-const validateInsuranceClaim = (req, res, next) => {
-    const { policy_id, incident_date, description, claim_amount } = req.body;
-
-    if (!policy_id) {
-        return res.status(400).json({ message: 'Policy ID is required' });
+const validateInsuranceClaim = (data) => {
+    console.log('Validating claim data:', data);
+    
+    // Check for required fields
+    if (!data.policy_id) {
+        console.log('Validation failed: Missing policy_id');
+        return 'Policy ID is required';
     }
 
-    if (!incident_date) {
-        return res.status(400).json({ message: 'Incident date is required' });
+    if (!data.incident_date) {
+        console.log('Validation failed: Missing incident_date');
+        return 'Incident date is required';
     }
 
-    const date = new Date(incident_date);
+    // Parse and validate the date
+    const date = new Date(data.incident_date);
     if (isNaN(date.getTime())) {
-        return res.status(400).json({ message: 'Valid incident date is required' });
+        console.log('Validation failed: Invalid incident_date format');
+        return 'Valid incident date is required';
     }
 
-    if (!description || description.trim().length < 10) {
-        return res.status(400).json({ message: 'Detailed incident description is required (minimum 10 characters)' });
+    if (!data.description || data.description.trim().length < 10) {
+        console.log('Validation failed: Description too short or missing');
+        return 'Detailed incident description is required (minimum 10 characters)';
     }
 
-    if (!claim_amount || isNaN(claim_amount) || claim_amount <= 0) {
-        return res.status(400).json({ message: 'Valid claim amount is required' });
+    const claimAmount = Number(data.claim_amount);
+    if (!data.claim_amount || isNaN(claimAmount) || claimAmount <= 0) {
+        console.log('Validation failed: Invalid claim_amount');
+        return 'Valid claim amount is required';
     }
 
-    next();
+    console.log('Validation passed for claim data');
+    return null;
 };
 
 module.exports = {

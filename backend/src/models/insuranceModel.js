@@ -114,12 +114,35 @@ class Insurance {
     static async createClaim(claimData) {
         const { policy_id, incident_date, description, claim_amount } = claimData;
         try {
+            console.log('Creating claim with data:', {
+                policy_id, 
+                incident_date, 
+                description: description ? description.substring(0, 20) + '...' : null,
+                claim_amount
+            });
+            
+            if (!policy_id || !incident_date || !description || !claim_amount) {
+                console.error('Missing required data for claim creation');
+                throw new Error('Missing required data for claim creation');
+            }
+            
+            // Format the date if needed
+            let formattedDate = incident_date;
+            if (typeof incident_date === 'string' && !incident_date.includes('T')) {
+                // If the date is just in YYYY-MM-DD format, add time
+                formattedDate = incident_date + ' 00:00:00';
+            }
+            
+            console.log('Executing SQL insert with parameters:', [policy_id, formattedDate, description, claim_amount]);
+            
             const [result] = await db.query(
                 `INSERT INTO insurance_claims (policy_id, incident_date, description, claim_amount)
                  VALUES (?, ?, ?, ?)`,
-                [policy_id, incident_date, description, claim_amount]
+                [policy_id, formattedDate, description, claim_amount]
             );
-            return { id: result.insertId, ...claimData };
+            
+            console.log('Claim created successfully with ID:', result.insertId);
+            return { id: result.insertId, ...claimData, status: 'pending' };
         } catch (error) {
             console.error('Error creating insurance claim:', error);
             throw error;

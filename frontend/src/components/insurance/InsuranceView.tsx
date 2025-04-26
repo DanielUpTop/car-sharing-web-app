@@ -50,6 +50,9 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useNavigate } from 'react-router-dom';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import { getMaxInsuranceCoverage, MembershipType } from '../../utils/membershipUtils';
+import { toast } from 'react-hot-toast';
 
 interface Policy {
     id: number;
@@ -75,6 +78,8 @@ interface Claim {
     coverage_amount: number;
     make: string;
     model: string;
+    admin_notes?: string;
+    created_at?: string;
 }
 
 // Add interface for creating a new policy
@@ -147,9 +152,12 @@ const InsuranceView = () => {
         description: '',
         claim_amount: ''
     });
+    const [membershipType, setMembershipType] = useState<MembershipType>(null);
+    const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null); // State for uploaded files
 
     useEffect(() => {
         fetchPoliciesAndClaims();
+        fetchMembership();
     }, []);
 
     const fetchPoliciesAndClaims = async () => {
@@ -224,6 +232,31 @@ const InsuranceView = () => {
         }
     };
 
+    const fetchMembership = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+            
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/memberships`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            if (response.status === 404) {
+                setMembershipType(null);
+                return;
+            }
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch membership');
+            }
+            
+            const data = await response.json();
+            setMembershipType(data.type as MembershipType);
+        } catch (error) {
+            console.error('Error fetching membership:', error);
+        }
+    };
+
     // Add function to fetch available bookings
     const fetchAvailableBookings = async () => {
         try {
@@ -258,9 +291,18 @@ const InsuranceView = () => {
         }
     };
 
-    // Add function to handle policy creation
+    // Modify handleCreatePolicy to respect coverage limits
     const handleCreatePolicy = async () => {
         try {
+            // Get max coverage amount based on membership tier
+            const maxCoverage = getMaxInsuranceCoverage(membershipType);
+            
+            // Check if user is trying to exceed their coverage limit
+            if (Number(policyForm.coverage_amount) > maxCoverage) {
+                setError(`Your ${membershipType || 'non-member'} status has a maximum coverage limit of $${maxCoverage}`);
+                return;
+            }
+            
             const token = localStorage.getItem('token');
             const response = await fetch(`${import.meta.env.VITE_API_URL}/api/insurance/policies`, {
                 method: 'POST',
@@ -323,18 +365,34 @@ const InsuranceView = () => {
             });
 
             const token = localStorage.getItem('token');
+
+            // Use FormData to send files
+            const formData = new FormData();
+            formData.append('policy_id', String(selectedPolicy.id));
+            formData.append('incident_date', formattedDate);
+            formData.append('description', claimForm.description);
+            formData.append('claim_amount', claimForm.claim_amount);
+
+            // Append files if they exist
+            if (selectedFiles) {
+                Array.from(selectedFiles).forEach((file, index) => {
+                    formData.append(`documents[${index}]`, file, file.name);
+                });
+            }
+
+            console.log('Submitting claim with FormData...');
+            // Logging FormData contents is tricky, log keys instead
+            for (let key of formData.keys()) {
+                console.log(`FormData key: ${key}`);
+            }
+
             const response = await fetch(`${import.meta.env.VITE_API_URL}/api/insurance/claims`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+                    // 'Content-Type': 'application/json' // Remove this header for FormData
                 },
-                body: JSON.stringify({
-                    policy_id: selectedPolicy.id,
-                    incident_date: formattedDate,
-                    description: claimForm.description,
-                    claim_amount: Number(claimForm.claim_amount)
-                })
+                body: formData // Send FormData object
             });
 
             console.log('Claim response status:', response.status);
@@ -349,6 +407,7 @@ const InsuranceView = () => {
             setOpenNewClaim(false);
             setClaimForm({ incident_date: '', description: '', claim_amount: '' });
             setSelectedPolicy(null);
+            setSelectedFiles(null); // Clear selected files after submission
         } catch (err) {
             console.error('Error in handleSubmitClaim:', err);
             setError(err instanceof Error ? err.message : 'Failed to submit claim');
@@ -412,6 +471,22 @@ const InsuranceView = () => {
         navigate('/login');
     };
 
+    // Add file change handler
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files) {
+            // Basic validation example (max 5 files)
+            if (event.target.files.length > 5) {
+                toast.error('You can upload a maximum of 5 files.');
+                // Clear the input if needed
+                event.target.value = ''
+                setSelectedFiles(null);
+                return;
+            }
+            setSelectedFiles(event.target.files);
+            // Optionally, you can loop through files here for more validation (size, type)
+        }
+    };
+
     if (loading) {
         return (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" flexDirection="column">
@@ -424,28 +499,38 @@ const InsuranceView = () => {
 
     return (
         <InsuranceErrorBoundary>
-            {/* Navbar */}
+            {/* Header copied from UserDashboard and adapted */}
             <AppBar position="fixed">
                 <Toolbar>
                     <IconButton
+                        edge="start" // Keep edge="start" from Dashboard
                         color="inherit"
-                        edge="start"
-                        onClick={() => navigate('/dashboard')}
-                        sx={{ mr: 2 }}
+                        onClick={() => navigate(-1)} // Use navigate(-1) for back
+                        sx={{ mr: 2 }} // Use default dashboard spacing
+                        aria-label="Back"
                     >
                         <ArrowBackIcon />
                     </IconButton>
-                    <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                        Car Sharing Dashboard - Insurance
-                    </Typography>
-                    <IconButton color="inherit" onClick={handleLogout}>
+                    <Box display="flex" alignItems="center" sx={{ flexGrow: 1 }}>
+                        <SecurityIcon sx={{ mr: 1.5 }} /> {/* Use SecurityIcon */} 
+                        <Typography variant="h6" component="div"> {/* Removed sx={{ flexGrow: 1 }} as Box has it */} 
+                            Insurance Information
+                        </Typography>
+                    </Box>
+                    {/* Optional: Logout button if desired, otherwise remove */}
+                    <IconButton color="inherit" onClick={handleLogout} title="Logout">
                         <LogoutIcon />
                     </IconButton>
                 </Toolbar>
             </AppBar>
-            <Toolbar /> {/* This empty Toolbar creates space below the AppBar */}
-            
-            <Container maxWidth="lg" sx={{ mt: 4, mb: 8 }}>
+            <Toolbar /> {/* Spacer */}
+
+            <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+                {error && (
+                    <Alert severity="error" sx={{ mb: 3 }}>
+                        {error}
+                    </Alert>
+                )}
                 <Paper elevation={0} sx={{ p: 3, mb: 4, borderRadius: 2, backgroundColor: 'rgba(0, 0, 0, 0.02)' }}>
                     <Box display="flex" alignItems="center" mb={2}>
                         <SecurityIcon sx={{ fontSize: 40, color: 'primary.main', mr: 2 }} />
@@ -484,9 +569,24 @@ const InsuranceView = () => {
                         />
                     </Tabs>
 
-                    {error && (
-                        <Alert severity="error" sx={{ m: 3 }}>
-                            {error}
+                    {membershipType !== null ? (
+                        <Alert severity="info" sx={{ mb: 2 }}>
+                            <Typography variant="subtitle2">
+                                {membershipType.charAt(0).toUpperCase() + membershipType.slice(1)} Membership Benefits
+                            </Typography>
+                            <Typography variant="body2">
+                                Your membership allows for {membershipType === 'basic' ? 'basic' : membershipType === 'premium' ? 'enhanced' : 'premium'} insurance coverage 
+                                up to ${getMaxInsuranceCoverage(membershipType)}.
+                            </Typography>
+                        </Alert>
+                    ) : (
+                        <Alert severity="warning" sx={{ mb: 2 }}>
+                            <Typography variant="subtitle2">
+                                Non-member limitations
+                            </Typography>
+                            <Typography variant="body2">
+                                As a non-member, your insurance options are limited. Consider upgrading your membership for better coverage options.
+                            </Typography>
                         </Alert>
                     )}
 
@@ -715,7 +815,8 @@ const InsuranceView = () => {
                                                 '&:hover': {
                                                     transform: 'translateY(-4px)',
                                                     boxShadow: 6
-                                                }
+                                                },
+                                                overflow: 'hidden'
                                             }}
                                             variant="outlined"
                                         >
@@ -730,99 +831,210 @@ const InsuranceView = () => {
                                                     alignItems: 'center'
                                                 }}
                                             >
-                                                <Typography variant="subtitle1" fontWeight="bold">
-                                                    Claim #{claim.id}
-                                                </Typography>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <GavelIcon fontSize="small" />
+                                                    <Typography variant="subtitle1" fontWeight="bold">
+                                                        Claim #{claim.id}
+                                                    </Typography>
+                                                </Box>
                                                 <Chip
                                                     label={claim.status.toUpperCase()}
                                                     color={getStatusColor(claim.status)}
                                                     size="small"
-                                                    sx={{ fontWeight: 'bold', bgcolor: '#fff' }}
+                                                    sx={{ 
+                                                        fontWeight: 'bold', 
+                                                        bgcolor: '#fff',
+                                                        borderRadius: 1,
+                                                        color: getStatusColor(claim.status) + '.main'
+                                                    }}
                                                 />
                                             </Box>
                                             
-                                            <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                                                <Box display="flex" alignItems="center" mb={2}>
-                                                    <Avatar 
-                                                        sx={{ 
-                                                            bgcolor: 'background.default',
-                                                            color: 'primary.main',
-                                                            mr: 2
-                                                        }}
-                                                    >
-                                                        <DirectionsCarIcon />
-                                                    </Avatar>
-                                                    <Typography variant="h6">
-                                                        {claim.make} {claim.model}
-                                                    </Typography>
-                                                </Box>
-                                                
-                                                <Box 
-                                                    sx={{ 
-                                                        mt: 2, 
-                                                        p: 2, 
-                                                        bgcolor: 'background.default',
-                                                        borderRadius: 1
-                                                    }}
-                                                >
-                                                    <Box display="flex" alignItems="flex-start" mb={1}>
-                                                        <DescriptionIcon 
-                                                            fontSize="small" 
-                                                            sx={{ mr: 1, mt: 0.5, color: 'text.secondary' }} 
-                                                        />
+                                            <CardContent sx={{ flexGrow: 1, p: 0 }}>
+                                                {/* Vehicle Information */}
+                                                <Box sx={{ p: 2, borderBottom: '1px solid rgba(0, 0, 0, 0.08)' }}>
+                                                    <Box display="flex" alignItems="center" mb={1}>
+                                                        <Avatar 
+                                                            sx={{ 
+                                                                bgcolor: 'background.default',
+                                                                color: 'primary.main',
+                                                                mr: 2
+                                                            }}
+                                                        >
+                                                            <DirectionsCarIcon />
+                                                        </Avatar>
                                                         <Box>
-                                                            <Typography variant="body2" color="text.secondary">
-                                                                Description
+                                                            <Typography variant="h6">
+                                                                {claim.make} {claim.model}
                                                             </Typography>
-                                                            <Typography variant="body1">
-                                                                {claim.description}
+                                                            <Typography variant="body2" color="text.secondary">
+                                                                Policy #{claim.policy_id} • {getPolicyTypeDetails(claim.coverage_type).label}
                                                             </Typography>
                                                         </Box>
                                                     </Box>
                                                 </Box>
                                                 
-                                                <Divider sx={{ my: 2 }} />
+                                                {/* Claim Description */}
+                                                <Box 
+                                                    sx={{ 
+                                                        m: 2, 
+                                                        p: 2, 
+                                                        bgcolor: 'background.default',
+                                                        borderRadius: 1,
+                                                        border: '1px solid rgba(0, 0, 0, 0.06)',
+                                                        position: 'relative'
+                                                    }}
+                                                >
+                                                    <Typography variant="overline" sx={{ 
+                                                        position: 'absolute',
+                                                        top: -10,
+                                                        left: 10,
+                                                        bgcolor: 'background.default',
+                                                        px: 1
+                                                    }}>
+                                                        INCIDENT DETAILS
+                                                    </Typography>
+                                                    <Box display="flex" alignItems="flex-start" mb={1}>
+                                                        <DescriptionIcon 
+                                                            fontSize="small" 
+                                                            sx={{ mr: 1, mt: 0.5, color: 'text.secondary' }} 
+                                                        />
+                                                        <Box sx={{ width: '100%' }}>
+                                                            <Typography variant="body1" sx={{
+                                                                maxHeight: '100px',
+                                                                overflow: 'auto',
+                                                                mb: 1
+                                                            }}>
+                                                                {claim.description}
+                                                            </Typography>
+                                                            <Chip 
+                                                                icon={<EventIcon fontSize="small" />} 
+                                                                label={`Incident date: ${format(new Date(claim.incident_date), 'MMM d, yyyy')}`}
+                                                                variant="outlined"
+                                                                size="small"
+                                                                sx={{ mr: 1, mt: 1 }}
+                                                            />
+                                                        </Box>
+                                                    </Box>
+                                                </Box>
                                                 
-                                                <List disablePadding>
-                                                    <ListItem disablePadding sx={{ mb: 1 }}>
-                                                        <ListItemIcon sx={{ minWidth: 36 }}>
-                                                            <AttachMoneyIcon color="primary" fontSize="small" />
-                                                        </ListItemIcon>
-                                                        <ListItemText
-                                                            primary="Claim Amount"
-                                                            secondary={`$${sanitizeNumber(claim.claim_amount).toFixed(2)}`}
-                                                            primaryTypographyProps={{ variant: 'body2' }}
-                                                            secondaryTypographyProps={{ 
-                                                                variant: 'subtitle1',
-                                                                fontWeight: 'bold',
-                                                                color: 'text.primary'
-                                                            }}
-                                                        />
-                                                    </ListItem>
-                                                    <ListItem disablePadding sx={{ mb: 1 }}>
-                                                        <ListItemIcon sx={{ minWidth: 36 }}>
-                                                            <EventIcon color="primary" fontSize="small" />
-                                                        </ListItemIcon>
-                                                        <ListItemText
-                                                            primary="Incident Date"
-                                                            secondary={format(new Date(claim.incident_date), 'MMM d, yyyy')}
-                                                            primaryTypographyProps={{ variant: 'body2' }}
-                                                            secondaryTypographyProps={{ variant: 'body2' }}
-                                                        />
-                                                    </ListItem>
-                                                    <ListItem disablePadding>
-                                                        <ListItemIcon sx={{ minWidth: 36 }}>
-                                                            <LocalOfferIcon color="primary" fontSize="small" />
-                                                        </ListItemIcon>
-                                                        <ListItemText
-                                                            primary="Coverage"
-                                                            secondary={`${claim.coverage_type} - $${sanitizeNumber(claim.coverage_amount).toFixed(2)}`}
-                                                            primaryTypographyProps={{ variant: 'body2' }}
-                                                            secondaryTypographyProps={{ variant: 'body2' }}
-                                                        />
-                                                    </ListItem>
-                                                </List>
+                                                {/* Claim Details */}
+                                                <Box sx={{ px: 2, py: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                                    {/* Amount */}
+                                                    <Box 
+                                                        sx={{ 
+                                                            display: 'flex', 
+                                                            justifyContent: 'space-between', 
+                                                            alignItems: 'center',
+                                                            p: 1.5,
+                                                            borderRadius: 1,
+                                                            bgcolor: 'primary.50',
+                                                            border: '1px solid',
+                                                            borderColor: 'primary.100'
+                                                        }}
+                                                    >
+                                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                            <AttachMoneyIcon color="primary" sx={{ mr: 1 }} />
+                                                            <Typography variant="body2" color="text.secondary">Claim Amount</Typography>
+                                                        </Box>
+                                                        <Typography variant="h6" color="primary.main" fontWeight="bold">
+                                                            ${sanitizeNumber(claim.claim_amount).toFixed(2)}
+                                                        </Typography>
+                                                    </Box>
+                                                    
+                                                    {/* Status Timeline */}
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, px: 1 }}>
+                                                        <Box sx={{ 
+                                                            width: '100%', 
+                                                            display: 'flex', 
+                                                            justifyContent: 'space-between',
+                                                            position: 'relative',
+                                                            '&::after': {
+                                                                content: '""',
+                                                                position: 'absolute',
+                                                                height: '2px',
+                                                                backgroundColor: 'divider',
+                                                                left: '10%',
+                                                                right: '10%',
+                                                                top: '50%',
+                                                                zIndex: 0
+                                                            }
+                                                        }}>
+                                                            {['pending', 'processing', 'approved', 'paid'].map((status, index) => {
+                                                                const isActive = ['approved', 'paid'].includes(claim.status) || 
+                                                                                claim.status === status ||
+                                                                                (claim.status === 'processing' && status === 'pending');
+                                                                const isCurrent = claim.status === status;
+                                                                
+                                                                return (
+                                                                    <Box key={status} sx={{ 
+                                                                        zIndex: 1, 
+                                                                        display: 'flex', 
+                                                                        flexDirection: 'column',
+                                                                        alignItems: 'center',
+                                                                        position: 'relative'
+                                                                    }}>
+                                                                        <Box 
+                                                                            sx={{ 
+                                                                                width: 16, 
+                                                                                height: 16, 
+                                                                                borderRadius: '50%',
+                                                                                bgcolor: isActive ? 'success.main' : 'divider',
+                                                                                border: isCurrent ? '2px solid' : 'none',
+                                                                                borderColor: 'success.main',
+                                                                                zIndex: 2
+                                                                            }}
+                                                                        />
+                                                                        <Typography 
+                                                                            variant="caption" 
+                                                                            sx={{ 
+                                                                                mt: 0.5,
+                                                                                fontWeight: isCurrent ? 'bold' : 'normal',
+                                                                                color: isCurrent ? 'text.primary' : 'text.secondary'
+                                                                            }}
+                                                                        >
+                                                                            {status.charAt(0).toUpperCase() + status.slice(1)}
+                                                                        </Typography>
+                                                                    </Box>
+                                                                );
+                                                            })}
+                                                        </Box>
+                                                    </Box>
+                                                </Box>
+                                                
+                                                {/* Administrative Notes (if any) */}
+                                                {claim.admin_notes && (
+                                                    <Box sx={{ px: 2, pb: 2, pt: 1 }}>
+                                                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                                                            <strong>Admin Notes:</strong>
+                                                        </Typography>
+                                                        <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'background.default' }}>
+                                                            <Typography variant="body2">{claim.admin_notes}</Typography>
+                                                        </Paper>
+                                                    </Box>
+                                                )}
                                             </CardContent>
+                                            
+                                            {/* Card Actions */}
+                                            <Box sx={{ 
+                                                p: 2, 
+                                                borderTop: '1px solid rgba(0, 0, 0, 0.08)', 
+                                                bgcolor: 'background.default',
+                                                display: 'flex',
+                                                justifyContent: 'space-between'
+                                            }}>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    Submitted on {format(new Date(claim.created_at || new Date()), 'MMM d, yyyy')}
+                                                </Typography>
+                                                <Button
+                                                    variant="text"
+                                                    size="small"
+                                                    onClick={() => navigate('/dashboard/chat', { state: { claimId: claim.id }})}
+                                                    sx={{ fontSize: '0.75rem' }}
+                                                >
+                                                    Discuss via chat
+                                                </Button>
+                                            </Box>
                                         </Card>
                                     </Grid>
                                 ))}
@@ -848,6 +1060,27 @@ const InsuranceView = () => {
                         {error && (
                             <Alert severity="error" sx={{ mb: 2 }}>
                                 {error}
+                            </Alert>
+                        )}
+                        
+                        {membershipType !== null ? (
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                                <Typography variant="subtitle2">
+                                    {membershipType.charAt(0).toUpperCase() + membershipType.slice(1)} Membership Benefits
+                                </Typography>
+                                <Typography variant="body2">
+                                    Your membership allows for {membershipType === 'basic' ? 'basic' : membershipType === 'premium' ? 'enhanced' : 'premium'} insurance coverage 
+                                    up to ${getMaxInsuranceCoverage(membershipType)}.
+                                </Typography>
+                            </Alert>
+                        ) : (
+                            <Alert severity="warning" sx={{ mb: 2 }}>
+                                <Typography variant="subtitle2">
+                                    Non-member limitations
+                                </Typography>
+                                <Typography variant="body2">
+                                    As a non-member, your insurance options are limited. Consider upgrading your membership for better coverage options.
+                                </Typography>
                             </Alert>
                         )}
                         
@@ -952,88 +1185,308 @@ const InsuranceView = () => {
                 <Dialog 
                     open={openNewClaim} 
                     onClose={() => setOpenNewClaim(false)}
-                    maxWidth="sm"
+                    maxWidth="md"
                     fullWidth
+                    PaperProps={{
+                        sx: { borderRadius: 2 }
+                    }}
                 >
-                    <DialogTitle sx={{ pb: 1 }}>
-                        <Box display="flex" alignItems="center">
-                            <ReportProblemIcon sx={{ mr: 1, color: 'error.main' }} />
-                            File New Insurance Claim
-                        </Box>
+                    <DialogTitle 
+                        sx={{ 
+                            pb: 1, 
+                            pt: 2, 
+                            px: 3,
+                            borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1.5
+                        }}
+                    >
+                        <ReportProblemIcon sx={{ color: 'error.main' }} />
+                        <Typography variant="h5" component="div">File New Insurance Claim</Typography>
                     </DialogTitle>
-                    <DialogContent sx={{ pt: 2 }}>
+
+                    {/* Multi-step form with improved UX */}
+                    <DialogContent sx={{ p: 0 }}>
                         {error && (
-                            <Alert severity="error" sx={{ mb: 2 }}>
+                            <Alert severity="error" sx={{ m: 3, mb: 0 }}>
                                 {error}
                             </Alert>
                         )}
                         
                         {selectedPolicy && (
-                            <Box sx={{ mb: 3, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
-                                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                    Filing claim for:
-                                </Typography>
-                                <Typography variant="body1" fontWeight="medium">
-                                    {selectedPolicy.make} {selectedPolicy.model} - Policy #{selectedPolicy.id}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    {getPolicyTypeDetails(selectedPolicy.coverage_type).label} - 
-                                    ${sanitizeNumber(selectedPolicy.coverage_amount).toFixed(2)}
-                                </Typography>
+                            <Box sx={{ m: 3, p: 2.5, bgcolor: 'background.default', borderRadius: 1, border: '1px solid rgba(0, 0, 0, 0.08)' }}>
+                                <Box display="flex" alignItems="center" gap={2} mb={1}>
+                                    <DirectionsCarIcon sx={{ color: 'primary.main' }} />
+                                    <Typography variant="h6" fontWeight="medium">
+                                        {selectedPolicy.make} {selectedPolicy.model}
+                                    </Typography>
+                                </Box>
+                                <Grid container spacing={2}>
+                                    <Grid item xs={12} sm={4}>
+                                        <Typography variant="body2" color="text.secondary">Policy #</Typography>
+                                        <Typography variant="body1" fontWeight="medium">{selectedPolicy.id}</Typography>
+                                    </Grid>
+                                    <Grid item xs={12} sm={4}>
+                                        <Typography variant="body2" color="text.secondary">Coverage Type</Typography>
+                                        <Typography variant="body1" fontWeight="medium">
+                                            {getPolicyTypeDetails(selectedPolicy.coverage_type).label}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid item xs={12} sm={4}>
+                                        <Typography variant="body2" color="text.secondary">Coverage Amount</Typography>
+                                        <Typography variant="body1" fontWeight="medium">
+                                            ${sanitizeNumber(selectedPolicy.coverage_amount).toFixed(2)}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid item xs={12}>
+                                        <Typography variant="body2" color="text.secondary">Booking Period</Typography>
+                                        <Typography variant="body1">
+                                            {selectedPolicy.booking_start ? format(new Date(selectedPolicy.booking_start), 'MMM d, yyyy') : '—'} to {selectedPolicy.booking_end ? format(new Date(selectedPolicy.booking_end), 'MMM d, yyyy') : '—'}
+                                        </Typography>
+                                    </Grid>
+                                </Grid>
                             </Box>
                         )}
                         
-                        <Typography variant="body2" color="text.secondary" paragraph>
-                            Please provide details about the incident that occurred during your rental period.
-                        </Typography>
+                        <Box sx={{ px: 3, py: 2 }}>
+                            <Typography variant="subtitle1" color="text.primary" gutterBottom fontWeight="medium">
+                                Incident Details
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" paragraph>
+                                Please provide detailed information about the incident that occurred during your rental period.
+                                All fields marked with * are required.
+                            </Typography>
                         
-                        <TextField
-                            label="Incident Date"
-                            type="date"
-                            fullWidth
-                            margin="normal"
-                            InputLabelProps={{ shrink: true }}
-                            value={claimForm.incident_date}
-                            onChange={(e) => {
-                                setError(null);
-                                setClaimForm({ ...claimForm, incident_date: e.target.value });
-                            }}
-                            helperText="When did the incident occur?"
-                        />
-                        <TextField
-                            label="Description"
-                            multiline
-                            rows={4}
-                            fullWidth
-                            margin="normal"
-                            value={claimForm.description}
-                            onChange={(e) => {
-                                setError(null);
-                                setClaimForm({ ...claimForm, description: e.target.value });
-                            }}
-                            helperText="Please provide detailed information about what happened (min. 10 characters)"
-                            placeholder="Describe the incident in detail, including what happened, where it occurred, and any other relevant information."
-                        />
-                        <TextField
-                            label="Claim Amount"
-                            type="number"
-                            fullWidth
-                            margin="normal"
-                            value={claimForm.claim_amount}
-                            onChange={(e) => {
-                                setError(null);
-                                setClaimForm({ ...claimForm, claim_amount: e.target.value });
-                            }}
-                            InputProps={{
-                                startAdornment: <span style={{ marginRight: '8px' }}>$</span>,
-                            }}
-                            helperText={selectedPolicy ? 
-                                `Maximum coverage: $${sanitizeNumber(selectedPolicy.coverage_amount).toFixed(2)}` : 
-                                "Enter the amount you're claiming"
-                            }
-                        />
+                            <form id="claim-form">
+                                <input 
+                                    type="hidden" 
+                                    name="policy_id" 
+                                    value={selectedPolicy?.id}
+                                />
+                                
+                                <Grid container spacing={3}>
+                                    {/* Date selection with improved UX */}
+                                    <Grid item xs={12} md={6}>
+                                        <Typography variant="body2" color="text.primary" gutterBottom sx={{ fontWeight: 'medium', mb: 1 }}>
+                                            Incident Date *
+                                        </Typography>
+                                        
+                                        <TextField
+                                            type="date"
+                                            name="incident_date"
+                                            fullWidth
+                                            value={claimForm.incident_date}
+                                            onChange={(e) => {
+                                                setError(null);
+                                                setClaimForm({ ...claimForm, incident_date: e.target.value });
+                                            }}
+                                            InputProps={{
+                                                startAdornment: (
+                                                    <Box component="span" mr={1}>
+                                                        <EventIcon color="action" fontSize="small" />
+                                                    </Box>
+                                                ),
+                                            }}
+                                            required
+                                            error={Boolean(error && error.includes('date'))}
+                                            helperText={selectedPolicy ? 
+                                                `Date must be within booking period: ${selectedPolicy.booking_start ? format(new Date(selectedPolicy.booking_start), 'MMM d, yyyy') : '—'} - ${selectedPolicy.booking_end ? format(new Date(selectedPolicy.booking_end), 'MMM d, yyyy') : '—'}` : 
+                                                'When did the incident occur?'
+                                            }
+                                            inputProps={{
+                                                min: selectedPolicy?.booking_start ? format(new Date(selectedPolicy.booking_start), 'yyyy-MM-dd') : '',
+                                                max: selectedPolicy?.booking_end ? format(new Date(selectedPolicy.booking_end), 'yyyy-MM-dd') : '',
+                                            }}
+                                            variant="outlined"
+                                            size="medium"
+                                        />
+                                    </Grid>
+                                    
+                                    {/* Claim amount with currency symbol */}
+                                    <Grid item xs={12} md={6}>
+                                        <Typography variant="body2" color="text.primary" gutterBottom sx={{ fontWeight: 'medium', mb: 1 }}>
+                                            Claim Amount *
+                                        </Typography>
+                                        
+                                        <TextField
+                                            type="number"
+                                            name="claim_amount"
+                                            fullWidth
+                                            value={claimForm.claim_amount}
+                                            onChange={(e) => {
+                                                setError(null);
+                                                setClaimForm({ ...claimForm, claim_amount: e.target.value });
+                                            }}
+                                            InputProps={{
+                                                startAdornment: (
+                                                    <Box component="span" mr={1}>
+                                                        <AttachMoneyIcon color="action" fontSize="small" />
+                                                    </Box>
+                                                ),
+                                            }}
+                                            required
+                                            error={Boolean(error && error.includes('amount'))}
+                                            helperText={selectedPolicy ?
+                                                `Maximum coverage: $${sanitizeNumber(selectedPolicy.coverage_amount).toFixed(2)}` :
+                                                "Enter the amount you're claiming"
+                                            }
+                                            inputProps={{
+                                                min: "1",
+                                                step: "0.01",
+                                                max: selectedPolicy?.coverage_amount || undefined
+                                            }}
+                                            variant="outlined"
+                                            size="medium"
+                                        />
+                                    </Grid>
+                                    
+                                    {/* Incident description with character count */}
+                                    <Grid item xs={12}>
+                                        <Typography variant="body2" color="text.primary" gutterBottom sx={{ fontWeight: 'medium', mb: 1 }}>
+                                            Description *
+                                        </Typography>
+                                        
+                                        <TextField
+                                            name="description"
+                                            multiline
+                                            rows={4}
+                                            fullWidth
+                                            value={claimForm.description}
+                                            onChange={(e) => {
+                                                setError(null);
+                                                setClaimForm({ ...claimForm, description: e.target.value });
+                                            }}
+                                            placeholder="Describe the incident in detail, including what happened, where it occurred, and any other relevant information."
+                                            required
+                                            error={Boolean(error && error.includes('description'))}
+                                            helperText={`${claimForm.description.length}/10+ characters required. Please provide detailed information about what happened.`}
+                                            InputProps={{
+                                                startAdornment: (
+                                                    <Box component="span" sx={{ position: 'absolute', top: 12, left: 12 }}>
+                                                        <DescriptionIcon color="action" fontSize="small" />
+                                                    </Box>
+                                                ),
+                                                sx: { pl: 5 }
+                                            }}
+                                            variant="outlined"
+                                            inputProps={{
+                                                minLength: 10
+                                            }}
+                                        />
+                                    </Grid>
+                                    
+                                    {/* File upload section */}
+                                    <Grid item xs={12}>
+                                        <Typography variant="body2" color="text.primary" gutterBottom sx={{ fontWeight: 'medium', mb: 1 }}>
+                                            Supporting Documents (Optional)
+                                        </Typography>
+                                        
+                                        <Paper
+                                            variant="outlined"
+                                            sx={{
+                                                p: 3,
+                                                border: '1px dashed rgba(0, 0, 0, 0.23)',
+                                                borderRadius: 1,
+                                                bgcolor: 'background.default',
+                                                textAlign: 'center',
+                                                cursor: 'pointer',
+                                                '&:hover': {
+                                                    bgcolor: 'action.hover',
+                                                }
+                                            }}
+                                        >
+                                            <input
+                                                type="file"
+                                                id="file-upload"
+                                                multiple
+                                                style={{ display: 'none' }}
+                                                accept="image/*,.pdf"
+                                                onChange={handleFileChange} // Attach handler
+                                            />
+                                            <label htmlFor="file-upload" style={{ cursor: 'pointer', display: 'block' }}>
+                                                <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
+                                                    <CloudUploadIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
+                                                    <Typography variant="body1" fontWeight="medium">
+                                                        Drag and drop or click to upload
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        Upload photos of the damage, invoices, police reports, or any other supporting documents
+                                                    </Typography>
+                                                    <Button
+                                                        variant="outlined"
+                                                        size="small"
+                                                        startIcon={<AddCircleOutlineIcon />}
+                                                        sx={{ mt: 1 }}
+                                                    >
+                                                        Choose Files
+                                                    </Button>
+                                                </Box>
+                                            </label>
+                                        </Paper>
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                            Accepted formats: JPG, PNG, PDF. Maximum 5 files, 10MB each.
+                                        </Typography>
+                                        {/* Display selected file names */}
+                                        {selectedFiles && selectedFiles.length > 0 && (
+                                            <Box sx={{ mt: 2, textAlign: 'left' }}>
+                                                <Typography variant="body2" fontWeight="medium">Selected Files:</Typography>
+                                                <List dense sx={{ maxHeight: 100, overflow: 'auto' }}>
+                                                    {Array.from(selectedFiles).map((file, index) => (
+                                                        <ListItem key={index} disablePadding>
+                                                            <ListItemIcon sx={{ minWidth: 24 }}>
+                                                                <DescriptionIcon fontSize="small" />
+                                                            </ListItemIcon>
+                                                            <ListItemText 
+                                                                primary={file.name} 
+                                                                secondary={`${(file.size / 1024 / 1024).toFixed(2)} MB`} 
+                                                                primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+                                                                secondaryTypographyProps={{ variant: 'caption' }}
+                                                            />
+                                                        </ListItem>
+                                                    ))}
+                                                </List>
+                                            </Box>
+                                        )}
+                                    </Grid>
+                                </Grid>
+                            </form>
+                        </Box>
+                        
+                        {/* Information about what happens next */}
+                        <Box sx={{ px: 3, pb: 3, pt: 1 }}>
+                            <Paper
+                                sx={{
+                                    p: 2,
+                                    bgcolor: 'info.50',
+                                    borderRadius: 1,
+                                    border: '1px solid',
+                                    borderColor: 'info.200'
+                                }}
+                            >
+                                <Typography variant="subtitle2" color="info.dark" gutterBottom>
+                                    What happens after you submit a claim?
+                                </Typography>
+                                <Typography variant="body2" color="info.dark">
+                                    1. Our admin team will review your claim within 1-2 business days (for a non-serious claim) and send a confirmation.
+                                </Typography>
+                                <Typography variant="body2" color="info.dark">
+                                    2. If your accident is serious or life-threatening, please call 999 immediately first, then contact us
+                                </Typography>
+                                <Typography variant="body2" color="info.dark">
+                                    3. Please note for all claims we aim to process within 24 hours, as our admin team tend to be busy with other claims so be patient.
+                                </Typography>
+                                <Typography variant="body2" color="info.dark">
+                                    4. We'll contact you via phone and email to discuss your claim details if needed.
+                                </Typography>
+                                <Typography variant="body2" color="info.dark">
+                                    5. You can always open a live chat to discuss your claim with our support team.
+                                </Typography>
+                            </Paper>
+                        </Box>
                     </DialogContent>
-                    <DialogActions sx={{ px: 3, pb: 2 }}>
+                    
+                    <DialogActions sx={{ px: 3, py: 2.5, borderTop: '1px solid rgba(0, 0, 0, 0.08)' }}>
                         <Button 
                             onClick={() => {
                                 setOpenNewClaim(false);
@@ -1048,9 +1501,8 @@ const InsuranceView = () => {
                             onClick={handleSubmitClaim} 
                             color="primary"
                             variant="contained"
-                            disabled={!claimForm.incident_date || !claimForm.description || !claimForm.claim_amount}
                             startIcon={<GavelIcon />}
-                            sx={{ borderRadius: 2 }}
+                            sx={{ borderRadius: 2, px: 3, fontSize: '1rem' }}
                         >
                             Submit Claim
                         </Button>

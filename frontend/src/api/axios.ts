@@ -14,10 +14,12 @@ api.interceptors.request.use(
         const token = localStorage.getItem('token');
         if (token && config.headers) {
             config.headers.Authorization = `Bearer ${token}`;
+            console.log('[API] Adding token to request:', config.url);
         }
         return config;
     },
     (error) => {
+        console.error('[API] Request interceptor error:', error);
         return Promise.reject(error);
     }
 );
@@ -26,28 +28,35 @@ api.interceptors.request.use(
 api.interceptors.response.use(
     (response) => response,
     (error) => {
+        console.error('[API] Response error:', {
+            status: error.response?.status,
+            url: error.config?.url,
+            message: error.response?.data?.message
+        });
+
         // Check if the error is a 401 (Unauthorized)
         if (error.response?.status === 401) {
-            // Skip token removal for email service related errors
             const url = error.config?.url || '';
-            const isEmailServiceError = 
-                url.includes('email') || 
-                url.includes('confirmation') ||
-                (error.response?.data?.message && 
-                 error.response.data.message.includes('car details'));
             
-            if (!isEmailServiceError) {
-                // Clear token on 401 Unauthorized (only for non-email errors)
-            localStorage.removeItem('token');
-            // Redirect to login if not already there
-            if (!window.location.pathname.includes('/login')) {
-                window.location.href = '/login';
+            // Only clear token for specific auth-related errors
+            if (
+                error.response?.data?.message?.includes('Invalid token') ||
+                error.response?.data?.message?.includes('Token has expired') ||
+                error.response?.data?.message?.includes('Access token is required')
+            ) {
+                console.log('[API] Clearing token due to auth error');
+                localStorage.removeItem('token');
+                
+                // Only redirect if not already on login page and not an API verification request
+                if (!window.location.pathname.includes('/login') && !url.includes('/verify')) {
+                    console.log('[API] Redirecting to login page');
+                    window.location.href = '/login';
                 }
             } else {
-                // Just log email service errors but don't log the user out
-                console.warn('Email service error occurred:', error.response?.data?.message);
+                console.warn('[API] 401 error but not clearing token:', error.response?.data?.message);
             }
         }
+        
         return Promise.reject(error);
     }
 );

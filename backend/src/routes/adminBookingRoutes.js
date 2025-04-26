@@ -23,6 +23,7 @@ router.get('/', async (req, res) => {
                 b.status,
                 b.total_price,
                 b.created_at,
+                b.priority,
                 u.first_name,
                 u.last_name,
                 u.email,
@@ -36,13 +37,38 @@ router.get('/', async (req, res) => {
             FROM bookings b
             JOIN users u ON b.user_id = u.id
             JOIN cars c ON b.car_id = c.id
-            ORDER BY b.created_at DESC
+            ORDER BY 
+                CASE 
+                    WHEN b.priority = 2 THEN 1  -- VIP priority
+                    WHEN b.priority = 1 THEN 2  -- Regular priority
+                    ELSE 3                      -- No priority
+                END,
+                b.created_at DESC
         `;
         
         const [bookings] = await db.query(query);
         
+        // Get all booking IDs to fetch discounts info
+        const bookingIds = bookings.map(booking => booking.id);
+        
+        // Get membership discount information for all bookings in a single query
+        const [discountInfo] = await db.query(`
+            SELECT * FROM booking_discounts 
+            WHERE booking_id IN (?)
+        `, [bookingIds.length > 0 ? bookingIds : [0]]);
+        
+        // Create a map for quick lookup
+        const discountMap = {};
+        discountInfo.forEach(discount => {
+            discountMap[discount.booking_id] = discount;
+        });
+        
         // Format the data to match the frontend expectations
-        const formattedBookings = bookings.map(booking => ({
+        const formattedBookings = bookings.map(booking => {
+            // Get membership discount info if available
+            const discount = discountMap[booking.id];
+            
+            const formattedBooking = {
             id: booking.id,
             user_id: booking.user_id,
             car_id: booking.car_id,
@@ -51,6 +77,7 @@ router.get('/', async (req, res) => {
             status: booking.status,
             total_price: booking.total_price,
             created_at: booking.created_at,
+                priority: booking.priority || 0,
             user: {
                 first_name: booking.first_name,
                 last_name: booking.last_name,
@@ -62,7 +89,20 @@ router.get('/', async (req, res) => {
                 registration_number: booking.registration_number,
                 address: booking.address || booking.location || `${booking.latitude}, ${booking.longitude}`
             }
-        }));
+            };
+            
+            // Add membership info if available
+            if (discount) {
+                formattedBooking.membership = {
+                    type: discount.membership_type,
+                    discount_percentage: discount.discount_percentage,
+                    original_price: parseFloat(discount.original_price),
+                    discounted_price: parseFloat(discount.discounted_price)
+                };
+            }
+            
+            return formattedBooking;
+        });
 
         res.json(formattedBookings);
     } catch (error) {
@@ -75,6 +115,8 @@ router.get('/', async (req, res) => {
 router.get('/bookings/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        
+        // First get the basic booking information
         const [booking] = await db.query(`
             SELECT 
                 b.*,
@@ -125,6 +167,42 @@ router.get('/bookings/:id', async (req, res) => {
         delete formattedBooking.location;
         delete formattedBooking.latitude;
         delete formattedBooking.longitude;
+
+        // Check for membership and discount information
+        try {
+            // Check if there's discount information
+            const [discountInfo] = await db.query(`
+                SELECT * FROM booking_discounts 
+                WHERE booking_id = ?
+            `, [id]);
+
+            // Check user's membership at the time of booking
+            const [membershipInfo] = await db.query(`
+                SELECT m.type 
+                FROM memberships m 
+                WHERE m.user_id = ? 
+                AND m.status = 'active' 
+                AND (m.start_date <= ? AND (m.end_date IS NULL OR m.end_date >= ?))
+            `, [booking[0].user_id, booking[0].created_at, booking[0].created_at]);
+
+            // Add membership information to the response
+            if (discountInfo.length > 0) {
+                formattedBooking.membership = {
+                    type: discountInfo[0].membership_type,
+                    discount_percentage: discountInfo[0].discount_percentage,
+                    original_price: parseFloat(discountInfo[0].original_price),
+                    discounted_price: parseFloat(discountInfo[0].discounted_price)
+                };
+            } else if (membershipInfo.length > 0) {
+                formattedBooking.membership = {
+                    type: membershipInfo[0].type,
+                    discount_percentage: 0 // No discount was applied
+                };
+            }
+        } catch (membershipError) {
+            console.error('Error fetching membership information:', membershipError);
+            // Continue without membership info if there's an error
+        }
 
         res.json(formattedBooking);
     } catch (error) {

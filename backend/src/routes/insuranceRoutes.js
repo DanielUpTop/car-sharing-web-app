@@ -70,29 +70,38 @@ router.post('/claims', authenticateToken, async (req, res) => {
         console.log('Received claim data:', req.body);
 
         // Validate the request data
-        const validationError = validateInsuranceClaim(req.body);
-        if (validationError) {
-            console.error('Validation error:', validationError);
-            return res.status(400).json({ message: validationError });
+        const validationResult = validateInsuranceClaim(req.body);
+        if (validationResult) {
+            console.error('Validation error:', validationResult);
+            return res.status(400).json({ message: validationResult });
         }
 
+        // Additional debug logging for troubleshooting
+        console.log('Validation passed, proceeding with claim submission');
+        
         // Verify policy ownership
         const policy = await Insurance.getPolicyById(req.body.policy_id);
         if (!policy) {
+            console.error('Policy not found:', req.body.policy_id);
             return res.status(404).json({ message: 'Policy not found' });
         }
         
+        console.log('Found policy:', policy.id, 'User ID:', policy.user_id, 'Requester ID:', req.user.id);
+        
         if (policy.user_id !== req.user.id) {
+            console.error('User not authorized to file claim. Policy user:', policy.user_id, 'Requester:', req.user.id);
             return res.status(403).json({ message: 'Not authorized to file claim for this policy' });
         }
 
         // Check if the policy is active
         if (policy.status !== 'active') {
+            console.error('Policy not active, status:', policy.status);
             return res.status(400).json({ message: 'Can only file claims for active policies' });
         }
 
+        console.log('Creating claim for policy:', policy.id);
         const claim = await Insurance.createClaim(req.body);
-        console.log('Created claim:', claim);
+        console.log('Created claim successfully:', claim);
         res.status(201).json(claim);
     } catch (error) {
         console.error('Error creating insurance claim:', error);

@@ -1,4 +1,40 @@
-const db = require('../config/dbConfig');
+const db = require('../config/database');
+
+// Membership tiers and their benefits
+const MEMBERSHIP_TIERS = {
+    NONE: {
+        name: 'Non-Member',
+        freeCancellationsPerMonth: 0,
+        priorityBooking: false,
+        freeUpgrades: false,
+        supportPriority: 'standard',
+        description: 'Default status with no additional benefits',
+    },
+    STANDARD: {
+        name: 'Standard',
+        freeCancellationsPerMonth: 1,
+        priorityBooking: false,
+        freeUpgrades: false,
+        supportPriority: 'normal',
+        description: 'Basic membership with standard benefits',
+    },
+    PREMIUM: {
+        name: 'Premium',
+        freeCancellationsPerMonth: 3,
+        priorityBooking: true,
+        freeUpgrades: false,
+        supportPriority: 'high',
+        description: 'Enhanced membership with priority booking and more free cancellations',
+    },
+    PLATINUM: {
+        name: 'Platinum',
+        freeCancellationsPerMonth: 5,
+        priorityBooking: true,
+        freeUpgrades: true,
+        supportPriority: 'highest',
+        description: 'Premium membership with all benefits including free upgrades',
+    }
+};
 
 class Membership {
     static async createTable() {
@@ -6,7 +42,7 @@ class Membership {
             CREATE TABLE IF NOT EXISTS memberships (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
-                type ENUM('basic', 'premium', 'platinum') NOT NULL DEFAULT 'basic',
+                type ENUM('none', 'basic', 'premium', 'platinum') NOT NULL DEFAULT 'none',
                 start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 end_date TIMESTAMP,
                 status ENUM('active', 'expired', 'cancelled') NOT NULL DEFAULT 'active',
@@ -27,7 +63,7 @@ class Membership {
         const benefitsSql = `
             CREATE TABLE IF NOT EXISTS membership_benefits (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                membership_type ENUM('basic', 'premium', 'platinum') NOT NULL,
+                membership_type ENUM('none', 'basic', 'premium', 'platinum') NOT NULL,
                 name VARCHAR(255) NOT NULL,
                 description TEXT,
                 discount_percentage INT,
@@ -42,12 +78,12 @@ class Membership {
         await db.query(benefitsSql);
     }
 
-    static async create(userId, type = 'basic', startDate = null, endDate = null, paymentId = null) {
+    static async create(userId, type = 'none', startDate = null, endDate = null, paymentId = null) {
         const defaultBenefits = await this.getDefaultBenefits(type);
         
         // Calculate end date for membership (default to 1 month later if not provided)
         let calculatedEndDate = endDate;
-        if (!calculatedEndDate) {
+        if (!calculatedEndDate && type !== 'none') {
             const oneMonthLater = new Date();
             oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
             calculatedEndDate = oneMonthLater.toISOString().split('T')[0];
@@ -55,7 +91,7 @@ class Membership {
 
         // Prepare payment history if payment ID is provided
         let paymentHistory = null;
-        if (paymentId) {
+        if (paymentId && type !== 'none') {
             paymentHistory = JSON.stringify([{
                 paymentId,
                 amount: type === 'basic' ? 9.99 : (type === 'premium' ? 19.99 : 29.99),
@@ -96,6 +132,14 @@ class Membership {
         return memberships[0] || null;
     }
 
+    static async getMembershipById(membershipId) {
+        const [memberships] = await db.query(
+            'SELECT * FROM memberships WHERE id = ?',
+            [membershipId]
+        );
+        return memberships[0] || null;
+    }
+
     static async updateMembership(userId, type) {
         const benefits = await this.getDefaultBenefits(type);
         await db.query(
@@ -103,6 +147,13 @@ class Membership {
              SET type = ?, benefits = ?, updated_at = CURRENT_TIMESTAMP 
              WHERE user_id = ? AND status = "active"`,
             [type, JSON.stringify(benefits), userId]
+        );
+    }
+
+    static async updateAutoRenew(membershipId, autoRenewStatus) {
+        await db.query(
+            `UPDATE memberships SET auto_renew = ? WHERE id = ?`,
+            [autoRenewStatus, membershipId]
         );
     }
 
@@ -116,11 +167,40 @@ class Membership {
     }
 
     static async checkAndUpdateExpiredMemberships() {
+        // First mark memberships as expired
         await db.query(
             `UPDATE memberships 
              SET status = "expired" 
              WHERE end_date < CURRENT_TIMESTAMP AND status = "active"`
         );
+        
+        // For cancelled memberships that have reached their end date, convert to non-member type
+        const [expiredMemberships] = await db.query(
+            `SELECT id, user_id FROM memberships 
+             WHERE end_date < CURRENT_TIMESTAMP AND status = "cancelled"`
+        );
+        
+        // Create new 'none' type memberships for users whose memberships expired
+        for (const membership of expiredMemberships) {
+            try {
+                // Create a new 'none' type membership
+                await this.create(membership.user_id, 'none');
+                
+                // Mark the old membership as expired
+                await db.query(
+                    `UPDATE memberships 
+                     SET status = "expired"
+                     WHERE id = ?`,
+                    [membership.id]
+                );
+                
+                console.log(`Converted user ${membership.user_id} to non-member after membership expiration`);
+            } catch (error) {
+                console.error(`Error converting user ${membership.user_id} to non-member:`, error);
+            }
+        }
+        
+        return expiredMemberships;
     }
 
     static async getAllMemberships() {
@@ -178,6 +258,193 @@ class Membership {
             'DELETE FROM memberships WHERE id = ?',
             [id]
         );
+    }
+
+    /**
+     * Get all membership tiers
+     * @returns {Object} All membership tiers and their benefits
+     */
+    static getAllTiers() {
+        return MEMBERSHIP_TIERS;
+    }
+
+    /**
+     * Get membership tier details
+     * @param {string} tier - Membership tier (STANDARD, PREMIUM, PLATINUM)
+     * @returns {Object|null} Membership tier details or null if not found
+     */
+    static getTierDetails(tier) {
+        return MEMBERSHIP_TIERS[tier] || null;
+    }
+
+    /**
+     * Check if a user has remaining free cancellations
+     * @param {number} userId - User ID
+     * @returns {Promise<boolean>} Whether user has remaining free cancellations
+     */
+    static async hasRemainingFreeCancellations(userId) {
+        try {
+            // Get user membership tier
+            const userQuery = 'SELECT membership_tier FROM users WHERE id = ?';
+            const user = await new Promise((resolve, reject) => {
+                db.query(userQuery, [userId], (err, results) => {
+                    if (err) return reject(err);
+                    resolve(results[0]);
+                });
+            });
+
+            if (!user) return false;
+
+            const tierDetails = this.getTierDetails(user.membership_tier);
+            if (!tierDetails) return false;
+
+            // Count recent cancellations
+            const cancellationsQuery = `
+                SELECT COUNT(*) as count 
+                FROM cancellations 
+                WHERE user_id = ? 
+                AND is_free = 1 
+                AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MONTH)
+            `;
+
+            const cancellations = await new Promise((resolve, reject) => {
+                db.query(cancellationsQuery, [userId], (err, results) => {
+                    if (err) return reject(err);
+                    resolve(results[0]);
+                });
+            });
+
+            return cancellations.count < tierDetails.freeCancellationsPerMonth;
+        } catch (error) {
+            console.error('Error checking free cancellations:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Get number of remaining free cancellations for a user
+     * @param {number} userId - User ID
+     * @returns {Promise<number>} Number of remaining free cancellations
+     */
+    static async getRemainingFreeCancellations(userId) {
+        try {
+            // Get user membership tier
+            const userQuery = 'SELECT membership_tier FROM users WHERE id = ?';
+            const user = await new Promise((resolve, reject) => {
+                db.query(userQuery, [userId], (err, results) => {
+                    if (err) return reject(err);
+                    if (!results.length) return resolve(null);
+                    resolve(results[0]);
+                });
+            });
+
+            if (!user) return 0;
+
+            const tierDetails = this.getTierDetails(user.membership_tier);
+            if (!tierDetails) return 0;
+
+            // Count recent free cancellations
+            const cancellationsQuery = `
+                SELECT COUNT(*) as count 
+                FROM cancellations 
+                WHERE user_id = ? 
+                AND is_free = 1 
+                AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MONTH)
+            `;
+
+            const cancellations = await new Promise((resolve, reject) => {
+                db.query(cancellationsQuery, [userId], (err, results) => {
+                    if (err) return reject(err);
+                    resolve(results[0]);
+                });
+            });
+
+            return Math.max(0, tierDetails.freeCancellationsPerMonth - cancellations.count);
+        } catch (error) {
+            console.error('Error getting remaining free cancellations:', error);
+            return 0;
+        }
+    }
+
+    /**
+     * Check if user has priority booking
+     * @param {number} userId - User ID
+     * @returns {Promise<boolean>} Whether user has priority booking
+     */
+    static async hasPriorityBooking(userId) {
+        try {
+            const query = 'SELECT membership_tier FROM users WHERE id = ?';
+            
+            const user = await new Promise((resolve, reject) => {
+                db.query(query, [userId], (err, results) => {
+                    if (err) return reject(err);
+                    if (!results.length) return resolve(null);
+                    resolve(results[0]);
+                });
+            });
+
+            if (!user) return false;
+            
+            const tierDetails = this.getTierDetails(user.membership_tier);
+            return tierDetails ? tierDetails.priorityBooking : false;
+        } catch (error) {
+            console.error('Error checking priority booking status:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Check if user is eligible for free upgrades
+     * @param {number} userId - User ID
+     * @returns {Promise<boolean>} Whether user is eligible for free upgrades
+     */
+    static async isEligibleForFreeUpgrades(userId) {
+        try {
+            const query = 'SELECT membership_tier FROM users WHERE id = ?';
+            
+            const user = await new Promise((resolve, reject) => {
+                db.query(query, [userId], (err, results) => {
+                    if (err) return reject(err);
+                    if (!results.length) return resolve(null);
+                    resolve(results[0]);
+                });
+            });
+
+            if (!user) return false;
+            
+            const tierDetails = this.getTierDetails(user.membership_tier);
+            return tierDetails ? tierDetails.freeUpgrades : false;
+        } catch (error) {
+            console.error('Error checking free upgrades eligibility:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Get support priority level for a user
+     * @param {number} userId - User ID
+     * @returns {Promise<string>} Support priority level ('normal', 'high', 'highest')
+     */
+    static async getSupportPriority(userId) {
+        try {
+            const query = 'SELECT membership_tier FROM users WHERE id = ?';
+            
+            const user = await new Promise((resolve, reject) => {
+                db.query(query, [userId], (err, results) => {
+                    if (err) return reject(err);
+                    if (!results.length) return resolve(null);
+                    resolve(results[0]);
+                });
+            });
+
+            if (!user) return 'normal';
+            
+            const tierDetails = this.getTierDetails(user.membership_tier);
+            return tierDetails ? tierDetails.supportPriority : 'normal';
+        } catch (error) {
+            console.error('Error getting support priority:', error);
+            return 'normal';
+        }
     }
 }
 

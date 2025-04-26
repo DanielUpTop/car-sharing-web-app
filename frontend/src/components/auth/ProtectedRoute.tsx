@@ -1,22 +1,29 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { CircularProgress, Box } from '@mui/material';
+import { Box, CircularProgress } from '@mui/material';
 
 interface ProtectedRouteProps {
     children: React.ReactNode;
+    allowedRoles?: string[];
     requireAdmin?: boolean;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false }) => {
-    const { user, loading, isAuthenticated } = useAuth();
-    const location = useLocation();
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles, requireAdmin }) => {
+    const { isAuthenticated, loading, user } = useAuth();
 
-    console.log(`[ProtectedRoute] Checking route: ${location.pathname}. Loading: ${loading}, IsAuth: ${isAuthenticated}, User: ${user ? user.email : 'null'}`);
+    console.log('[ProtectedRoute] Checking access...', {
+        isAuthenticated,
+        loading,
+        userEmail: user?.email,
+        userRole: user?.role,
+        allowedRoles,
+        requireAdmin,
+        hasUser: !!user
+    });
 
-    // Show loading state
     if (loading) {
-        console.log(`[ProtectedRoute] Showing loading spinner for ${location.pathname}`);
+        console.log('[ProtectedRoute] Still loading auth state...');
         return (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
                 <CircularProgress />
@@ -24,19 +31,32 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin 
         );
     }
 
-    // If there's no user, redirect to login
+    // Check authentication first
     if (!isAuthenticated || !user) {
-        console.error(`[ProtectedRoute] <<<< UNAUTHENTICATED >>>> for route ${location.pathname}. IsAuth: ${isAuthenticated}, User: ${user ? 'exists' : 'null'}. Redirecting to /login.`);
-        return <Navigate to="/login" state={{ from: location }} replace />;
+        console.error('[ProtectedRoute] Access denied: Not authenticated', {
+            isAuthenticated,
+            hasUser: !!user
+        });
+        return <Navigate to="/login" replace />;
     }
 
-    // Check admin access
+    // Check if admin access is required
     if (requireAdmin && user.role !== 'admin') {
-        console.warn(`[ProtectedRoute] Admin access required for ${location.pathname}, user role is ${user.role}. Redirecting to /dashboard.`);
+        console.error('[ProtectedRoute] Access denied: Admin role required', {
+            userRole: user.role
+        });
         return <Navigate to="/dashboard" replace />;
     }
 
-    console.log(`[ProtectedRoute] Access granted for ${location.pathname}`);
+    // Check role-based access
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+        console.error('[ProtectedRoute] Access denied: Role not allowed', {
+            userRole: user.role,
+            allowedRoles
+        });
+        return <Navigate to="/dashboard" replace />;
+    }
+
     return <>{children}</>;
 };
 

@@ -22,7 +22,12 @@ import {
     Select,
     MenuItem,
     Slider,
-    Stack
+    Stack,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Alert
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -46,6 +51,7 @@ interface Car {
     total_ratings?: number;
     location?: string;
     address?: string;
+    required_membership?: 'none' | 'basic' | 'premium' | 'platinum';
 }
 
 const CarList = () => {
@@ -65,6 +71,100 @@ const CarList = () => {
     const [selectedType, setSelectedType] = useState<string>('all');
     const [selectedAvailability, setSelectedAvailability] = useState<string>('all');
 
+    // Add these imports and methods to the CarList component
+    // Add state for user membership
+    const [userMembership, setUserMembership] = useState<string | null>(null);
+    const [membershipLoading, setMembershipLoading] = useState(true);
+
+    // Add state for the membership dialog
+    const [showMembershipDialog, setShowMembershipDialog] = useState(false);
+    const [selectedCarForMembership, setSelectedCarForMembership] = useState<Car | null>(null);
+
+    // Add useEffect to fetch user membership
+    useEffect(() => {
+        const fetchUserMembership = async () => {
+            try {
+                setMembershipLoading(true);
+                const token = localStorage.getItem('token');
+                
+                if (!token) {
+                    setMembershipLoading(false);
+                    setUserMembership(null);
+                    return;
+                }
+
+                const response = await fetch(
+                    `${import.meta.env.VITE_API_URL}/api/memberships`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    }
+                );
+
+                if (response.status === 404) {
+                    // User doesn't have a membership
+                    setUserMembership(null);
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch membership data');
+                }
+
+                const data = await response.json();
+                setUserMembership(data.type);
+            } catch (err) {
+                console.error('Error fetching membership:', err);
+                setUserMembership(null);
+            } finally {
+                setMembershipLoading(false);
+            }
+        };
+
+        fetchUserMembership();
+    }, []);
+
+    // Add method to check if user meets membership requirement
+    const isMembershipSufficient = (requiredMembership?: string) => {
+        if (!requiredMembership || requiredMembership === 'none') {
+            return true;
+        }
+
+        if (!userMembership) {
+            return false;
+        }
+
+        const membershipLevels = {
+            'none': 0,
+            'basic': 1,
+            'premium': 2,
+            'platinum': 3
+        };
+
+        const userLevel = membershipLevels[userMembership as keyof typeof membershipLevels];
+        const requiredLevel = membershipLevels[requiredMembership as keyof typeof membershipLevels];
+        
+        return userLevel >= requiredLevel;
+    };
+
+    // Add method to get button text based on car
+    const getBookButtonText = (car: Car) => {
+        if (car.availability_status !== 'available') {
+            return 'Not Available';
+        }
+        
+        if (membershipLoading) {
+            return 'Loading...';
+        }
+        
+        if (!isMembershipSufficient(car.required_membership)) {
+            return `Requires ${car.required_membership}`;
+        }
+        
+        return 'Book Now';
+    };
+
     useEffect(() => {
         fetchCars();
     }, []);
@@ -75,7 +175,8 @@ const CarList = () => {
 
     const fetchCars = async () => {
         try {
-            const response = await fetch('http://localhost:5001/api/cars');
+            // Use the available endpoint which now returns all cars regardless of membership
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/cars/available`);
             const data = await response.json();
             
             if (!response.ok) {
@@ -88,7 +189,8 @@ const CarList = () => {
             const processedCars = data.map((car: Car) => {
                 console.log(`Processing car ${car.make} ${car.model}:`, {
                     address: car.address,
-                    location: car.location
+                    location: car.location,
+                    required_membership: car.required_membership
                 }); // Debug log
                 return {
                     ...car,
@@ -139,6 +241,30 @@ const CarList = () => {
 
     const handlePriceRangeChange = (event: Event, newValue: number | number[]) => {
         setPriceRange(newValue as [number, number]);
+    };
+
+    const getMembershipColor = (membershipType: string) => {
+        switch (membershipType) {
+            case 'platinum': return '#FFD700'; // Gold
+            case 'premium': return '#1976d2';  // Blue
+            case 'basic': return '#2E7D32';    // Green
+            default: return '#757575';         // Grey
+        }
+    };
+
+    // Add this function to handle booking button click
+    const handleBookButtonClick = (car: Car) => {
+        if (isMembershipSufficient(car.required_membership)) {
+            console.log('Button clicked');
+            console.log('Car:', car);
+            setSelectedCar(car);
+            setBookingDialogOpen(true);
+            console.log('Dialog should open');
+        } else {
+            // Show membership dialog instead of redirecting
+            setSelectedCarForMembership(car);
+            setShowMembershipDialog(true);
+        }
     };
 
     if (loading) {
@@ -259,8 +385,27 @@ const CarList = () => {
                                 '&:hover': {
                                     transform: 'translateY(-5px)',
                                     boxShadow: 6
-                                }
+                                },
+                                position: 'relative'
                             }}>
+                                {car.required_membership && car.required_membership !== 'none' && (
+                                    <Box 
+                                        sx={{ 
+                                            position: 'absolute', 
+                                            top: 0, 
+                                            right: 0, 
+                                            backgroundColor: getMembershipColor(car.required_membership),
+                                            color: 'white',
+                                            padding: '4px 8px',
+                                            borderBottomLeftRadius: '8px',
+                                            fontWeight: 'bold',
+                                            fontSize: '0.75rem',
+                                            zIndex: 2
+                                        }}
+                                    >
+                                        {car.required_membership.toUpperCase()} ONLY
+                                    </Box>
+                                )}
                                 <CardMedia
                                     component="img"
                                     height="200"
@@ -316,18 +461,16 @@ const CarList = () => {
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            console.log('Button clicked');
-                                            console.log('Car:', car);
-                                            setSelectedCar(car);
-                                            setBookingDialogOpen(true);
-                                            console.log('Dialog should open');
+                                            handleBookButtonClick(car);
                                         }}
                                         sx={{ 
                                             mt: 'auto',
-                                            backgroundColor: car.availability_status === 'available' ? 'primary.main' : 'grey.300'
+                                            backgroundColor: car.availability_status === 'available' 
+                                                ? (isMembershipSufficient(car.required_membership) ? 'primary.main' : 'warning.main')
+                                                : 'grey.300'
                                         }}
                                     >
-                                        {car.availability_status === 'available' ? 'Book Now' : 'Not Available'}
+                                        {getBookButtonText(car)}
                                     </Button>
                                 </Box>
                             </Card>
@@ -350,7 +493,8 @@ const CarList = () => {
                         type: selectedCar.type,
                         pricePerHour: selectedCar.pricePerHour,
                         image: selectedCar.image,
-                        address: (selectedCar.address || selectedCar.location || 'No location set for this vehicle') as string
+                        address: (selectedCar.address || selectedCar.location || 'No location set for this vehicle') as string,
+                        required_membership: selectedCar.required_membership
                     }}
                     onBookingComplete={() => navigate('/dashboard/bookings')}
                 />
@@ -366,6 +510,51 @@ const CarList = () => {
                     carId={selectedCarForRatings.id}
                     carName={`${selectedCarForRatings.make} ${selectedCarForRatings.model}`}
                 />
+            )}
+
+            {showMembershipDialog && selectedCarForMembership && (
+                <Dialog 
+                    open={showMembershipDialog} 
+                    onClose={() => setShowMembershipDialog(false)}
+                    PaperProps={{
+                        sx: { borderRadius: 2, maxWidth: 500 }
+                    }}
+                >
+                    <DialogTitle sx={{ pt: 3, pb: 1 }}>
+                        <Typography variant="h5" fontWeight="bold" color="warning.main">
+                            Membership Required
+                        </Typography>
+                    </DialogTitle>
+                    <DialogContent>
+                        <Alert severity="warning" sx={{ mb: 2 }}>
+                            This vehicle requires a {selectedCarForMembership.required_membership} membership.
+                        </Alert>
+                        <Typography variant="body1" paragraph>
+                            To book the {selectedCarForMembership.make} {selectedCarForMembership.model}, you need to upgrade your membership to {selectedCarForMembership.required_membership} or higher.
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 2 }}>
+                            {userMembership ? 
+                                `Your current membership level (${userMembership}) doesn't meet the requirement.` : 
+                                "You currently don't have an active membership."}
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions sx={{ px: 3, pb: 3 }}>
+                        <Button onClick={() => setShowMembershipDialog(false)} variant="outlined">
+                            Close
+                        </Button>
+                        <Button 
+                            onClick={() => {
+                                setShowMembershipDialog(false);
+                                navigate('/membership');
+                            }} 
+                            variant="contained" 
+                            color="warning"
+                            sx={{ fontWeight: 'bold' }}
+                        >
+                            Upgrade Membership
+                        </Button>
+                    </DialogActions>
+                </Dialog>
             )}
         </>
     );

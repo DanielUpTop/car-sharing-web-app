@@ -18,7 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 const Login = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { login, error: authError } = useAuth();
+    const { login } = useAuth();
     
     // Get the redirect path from location state, or default to dashboard
     const from = location.state?.from?.pathname || "/dashboard";
@@ -46,13 +46,19 @@ const Login = () => {
 
         try {
             const userRole = await login(formData.email, formData.password);
-            
-            // Navigate based on role
+            console.log('[Login] Login successful, user role:', userRole);
+
             if (userRole === 'admin') {
-                navigate('/admin');
-            } else {
-                navigate('/dashboard');
+                console.log('[Login] Admin user detected, redirecting to admin dashboard');
+                navigate('/admin', { replace: true });
+                return;
             }
+
+            // For non-admin users, use the from path or default to dashboard
+            const targetPath = location.state?.from?.pathname || '/dashboard';
+            console.log('[Login] Regular user detected, redirecting to:', targetPath);
+            navigate(targetPath, { replace: true });
+
         } catch (err: any) {
             console.error('Login error:', err);
             setError(err.message || 'Failed to login');
@@ -88,9 +94,9 @@ const Login = () => {
                         Sign in to continue to Car Sharing
                     </Typography>
 
-                    {(error || authError) && (
+                    {error && (
                         <Alert severity="error" sx={{ mb: 2 }}>
-                            {error || authError}
+                            {error}
                         </Alert>
                     )}
 

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/userModel');
+const Membership = require('../models/membershipModel');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/dbConfig');
@@ -35,6 +36,15 @@ router.post('/register', async (req, res) => {
             verification_token: verificationToken,
             is_verified: false
         });
+
+        // Create a 'none' type membership for the user
+        try {
+            await Membership.create(userId, 'none');
+            console.log(`Created 'none' membership for new user ${userId}`);
+        } catch (membershipError) {
+            console.error(`Error creating default membership for user ${userId}:`, membershipError);
+            // Don't fail registration if membership creation fails
+        }
 
         res.status(201).json({
             message: 'User registered successfully. Please check your email to verify your account.',

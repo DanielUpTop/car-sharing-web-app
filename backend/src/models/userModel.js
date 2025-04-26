@@ -1,4 +1,4 @@
-const db = require('../config/dbConfig');
+const db = require('../config/database');
 const bcrypt = require('bcryptjs');
 
 class User {
@@ -16,6 +16,8 @@ class User {
                 status ENUM('active', 'inactive', 'suspended') DEFAULT 'active',
                 is_verified BOOLEAN DEFAULT FALSE,
                 verification_token VARCHAR(255),
+                membership_tier ENUM('STANDARD', 'PREMIUM', 'PLATINUM') DEFAULT 'STANDARD',
+                remaining_cancellations INT DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
@@ -240,6 +242,151 @@ class User {
             console.error('Error getting dashboard stats:', error);
             throw error;
         }
+    }
+
+    /**
+     * Get user by ID
+     * @param {number} id - User ID
+     * @returns {Promise<Object|null>} User object or null if not found
+     */
+    static async getUserById(id) {
+        return new Promise((resolve, reject) => {
+            const query = 'SELECT * FROM users WHERE id = ?';
+            db.query(query, [id], (err, results) => {
+                if (err) {
+                    console.error('Error fetching user by ID:', err);
+                    return reject(err);
+                }
+                if (results.length === 0) {
+                    return resolve(null);
+                }
+                resolve(results[0]);
+            });
+        });
+    }
+
+    /**
+     * Get user by email
+     * @param {string} email - User email
+     * @returns {Promise<Object|null>} User object or null if not found
+     */
+    static async getUserByEmail(email) {
+        return new Promise((resolve, reject) => {
+            const query = 'SELECT * FROM users WHERE email = ?';
+            db.query(query, [email], (err, results) => {
+                if (err) {
+                    console.error('Error fetching user by email:', err);
+                    return reject(err);
+                }
+                if (results.length === 0) {
+                    return resolve(null);
+                }
+                resolve(results[0]);
+            });
+        });
+    }
+
+    /**
+     * Create a new user
+     * @param {Object} userData - User data
+     * @returns {Promise<Object>} Created user object
+     */
+    static async createUser(userData) {
+        return new Promise((resolve, reject) => {
+            // Default membership tier is STANDARD if not provided
+            const membershipTier = userData.membership_tier || 'STANDARD';
+            
+            // Set default remaining cancellations based on membership tier
+            let remainingCancellations = 1; // Default for STANDARD
+            
+            if (membershipTier === 'PREMIUM') {
+                remainingCancellations = 3;
+            } else if (membershipTier === 'PLATINUM') {
+                remainingCancellations = 5;
+            }
+
+            // Hash the password
+            bcrypt.hash(userData.password, 10, (err, hashedPassword) => {
+                if (err) {
+                    console.error('Error hashing password:', err);
+                    return reject(err);
+                }
+
+                const query = `INSERT INTO users 
+                    (email, password, first_name, last_name, phone_number, profile_picture_url, is_admin, membership_tier, remaining_cancellations) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                
+                db.query(
+                    query,
+                    [
+                        userData.email,
+                        hashedPassword,
+                        userData.first_name,
+                        userData.last_name,
+                        userData.phone_number,
+                        userData.profile_picture_url || null,
+                        userData.is_admin || 0,
+                        membershipTier,
+                        remainingCancellations
+                    ],
+                    (err, result) => {
+                        if (err) {
+                            console.error('Error creating user:', err);
+                            return reject(err);
+                        }
+                        
+                        resolve(result.insertId);
+                    }
+                );
+            });
+        });
+    }
+
+    /**
+     * Update user details
+     * @param {number} id - User ID
+     * @param {Object} userData - Updated user data
+     * @returns {Promise<boolean>} Success status
+     */
+    static async updateUser(id, userData) {
+        return new Promise((resolve, reject) => {
+            const query = 'UPDATE users SET ? WHERE id = ?';
+            db.query(query, [userData, id], (err, result) => {
+                if (err) {
+                    console.error('Error updating user:', err);
+                    return reject(err);
+                }
+                resolve(result.affectedRows > 0);
+            });
+        });
+    }
+
+    /**
+     * Update user's membership tier
+     * @param {number} id - User ID
+     * @param {string} membershipTier - New membership tier
+     * @returns {Promise<boolean>} Success status
+     */
+    static async updateMembershipTier(id, membershipTier) {
+        return new Promise((resolve, reject) => {
+            // Set cancellations based on membership tier
+            let remainingCancellations = 1; // Default for STANDARD
+            
+            if (membershipTier === 'PREMIUM') {
+                remainingCancellations = 3;
+            } else if (membershipTier === 'PLATINUM') {
+                remainingCancellations = 5;
+            }
+            
+            const query = 'UPDATE users SET membership_tier = ?, remaining_cancellations = ? WHERE id = ?';
+            db.query(query, [membershipTier, remainingCancellations, id], (err, result) => {
+                if (err) {
+                    console.error('Error updating membership tier:', err);
+                    return reject(err);
+                }
+                resolve(result.affectedRows > 0);
+            });
+        });
     }
 }
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Dialog,
     DialogTitle,
@@ -7,9 +7,11 @@ import {
     Button,
     Typography,
     Box,
-    CircularProgress
+    CircularProgress,
+    Alert
 } from '@mui/material';
 import WarningIcon from '@mui/icons-material/Warning';
+import { canCancelBooking, MembershipType } from '../../utils/membershipUtils';
 
 interface Booking {
     id: number;
@@ -38,6 +40,82 @@ const CancelBookingDialog = ({
     loading,
     bookingDetails 
 }: CancelBookingDialogProps) => {
+    const [membershipType, setMembershipType] = useState<MembershipType>(null);
+    const [cancellationsUsed, setCancellationsUsed] = useState(0);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchMembershipInfo = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                
+                // Fetch membership type
+                const membershipResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/memberships`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                
+                if (membershipResponse.status === 404) {
+                    setMembershipType(null);
+                } else if (membershipResponse.ok) {
+                    const membershipData = await membershipResponse.json();
+                    setMembershipType(membershipData.type as MembershipType);
+                }
+                
+                // Fetch cancellations used this month
+                const cancellationsResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/bookings/cancellations/count`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                
+                if (cancellationsResponse.ok) {
+                    const cancellationsData = await cancellationsResponse.json();
+                    setCancellationsUsed(cancellationsData.count || 0);
+                }
+            } catch (error) {
+                console.error('Error fetching membership info:', error);
+            }
+        };
+        
+        fetchMembershipInfo();
+    }, []);
+
+    const freeCancel = canCancelBooking(membershipType, cancellationsUsed);
+
+    const handleCancel = async () => {
+        if (!bookingDetails?.id) return;
+        
+        try {
+            setIsSubmitting(true);
+            const token = localStorage.getItem('token');
+            
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/bookings/${bookingDetails.id}/cancel`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    reason: cancelReason,
+                    freeCancel: freeCancel // Include whether this is a free cancellation based on membership
+                })
+            });
+            
+            if (response.ok) {
+                onConfirm();
+                onClose();
+            } else {
+                const errorData = await response.json();
+                setError(errorData.message || 'Failed to cancel booking');
+            }
+        } catch (err) {
+            setError('An error occurred while trying to cancel the booking');
+            console.error('Error cancelling booking:', err);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     return (
         <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
             <DialogTitle sx={{ bgcolor: 'error.main', color: 'white' }}>
@@ -60,6 +138,21 @@ const CancelBookingDialog = ({
                         </Typography>
                     </Box>
                 )}
+                <Box sx={{ mb: 2, mt: 1 }}>
+                    {freeCancel ? (
+                        <Alert severity="success">
+                            Your {membershipType} membership includes free cancellations. 
+                            No fee will be charged for this cancellation.
+                        </Alert>
+                    ) : (
+                        <Alert severity="warning">
+                            {membershipType 
+                              ? `You've used all your free cancellations for this month with your ${membershipType} membership.`
+                              : "Non-members don't have free cancellations."} 
+                            A cancellation fee may apply.
+                        </Alert>
+                    )}
+                </Box>
                 <Typography color="error" sx={{ mt: 2 }}>
                     This action cannot be undone.
                 </Typography>
@@ -73,7 +166,7 @@ const CancelBookingDialog = ({
                     Keep Booking
                 </Button>
                 <Button
-                    onClick={onConfirm}
+                    onClick={handleCancel}
                     variant="contained"
                     color="error"
                     disabled={loading}

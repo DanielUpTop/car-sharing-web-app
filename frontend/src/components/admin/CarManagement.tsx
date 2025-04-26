@@ -64,7 +64,8 @@ const initialFormData: CarFormData = {
 };
 
 const CarManagement = () => {
-    const { token } = useAuth();
+    const { } = useAuth();
+    const [token, setToken] = useState(localStorage.getItem('token'));
     const [cars, setCars] = useState<Car[]>([]);
     const [loading, setLoading] = useState(true);
     const [openDialog, setOpenDialog] = useState(false);
@@ -73,10 +74,8 @@ const CarManagement = () => {
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
     useEffect(() => {
-        if (token) {
-            fetchCars();
-        }
-    }, [token]);
+        fetchCars();
+    }, []);
 
     const fetchCars = async () => {
         try {

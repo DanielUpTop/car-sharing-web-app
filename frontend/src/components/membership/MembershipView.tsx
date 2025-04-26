@@ -23,7 +23,14 @@ import {
     Divider,
     AppBar,
     Toolbar,
-    IconButton
+    IconButton,
+    Switch,
+    FormControl,
+    RadioGroup,
+    FormControlLabel as MuiFormControlLabel,
+    FormGroup,
+    Snackbar,
+    Alert as MuiAlert
 } from '@mui/material';
 import {
     CheckCircle as CheckCircleIcon,
@@ -37,10 +44,12 @@ import {
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { toast } from 'react-hot-toast';
 
 interface Membership {
     id: number;
-    type: 'basic' | 'premium' | 'platinum';
+    type: 'none' | 'basic' | 'premium' | 'platinum';
     start_date: string;
     end_date: string | null;
     status: 'active' | 'expired' | 'cancelled';
@@ -57,15 +66,35 @@ interface MembershipBenefit {
     free_cancellations?: number;
 }
 
-const membershipLevels = {
+interface MembershipTier {
+    id: number;
+    type: string;
+    name: string;
+    description: string;
+    price: number;
+    benefits: string[];
+    is_active: boolean;
+}
+
+// Fallback membership level definitions in case API fails
+const fallbackMembershipLevels = {
+    none: {
+        color: '#9e9e9e',
+        price: 0.00,
+        benefits: [
+            'No additional benefits',
+            'Standard booking',
+            'No discount on rentals',
+            'Standard customer support'
+        ]
+    },
     basic: {
         color: '#757575',
         price: 9.99,
         benefits: [
             'Basic insurance coverage',
             'Standard booking priority',
-            '5% discount on rentals',
-            '1 free cancellation per month'
+            '5% discount on rentals'
         ]
     },
     premium: {
@@ -75,7 +104,6 @@ const membershipLevels = {
             'Enhanced insurance coverage',
             'Priority booking',
             '10% discount on rentals',
-            '3 free cancellations per month',
             '24/7 customer support'
         ]
     },
@@ -86,23 +114,27 @@ const membershipLevels = {
             'Premium insurance coverage',
             'VIP booking priority',
             '15% discount on rentals',
-            'Unlimited free cancellations',
-            'Dedicated customer support',
-            'Free upgrades when available'
+            'Dedicated customer support'
         ]
     }
 };
 
 const MembershipView = () => {
     const [membership, setMembership] = useState<Membership | null>(null);
+    const [membershipTiers, setMembershipTiers] = useState<MembershipTier[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [openUpgrade, setOpenUpgrade] = useState(false);
-    const [selectedType, setSelectedType] = useState<'basic' | 'premium' | 'platinum'>('basic');
+    const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
+    const [selectedType, setSelectedType] = useState<'basic' | 'premium' | 'platinum' | null>(null);
+    const [autoRenew, setAutoRenew] = useState(false);
+    const [updatingRenewal, setUpdatingRenewal] = useState(false);
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchMembership();
+        fetchMembershipTiers();
     }, []);
 
     const fetchMembership = async () => {
@@ -111,11 +143,12 @@ const MembershipView = () => {
             setError(null);
             const token = localStorage.getItem('token');
 
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/membership`, {
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/memberships`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
             if (response.status === 404) {
+                console.log('No active membership found');
                 setMembership(null);
                 setLoading(false);
                 return;
@@ -127,6 +160,7 @@ const MembershipView = () => {
 
             const data = await response.json();
             setMembership(data);
+            setAutoRenew(data?.auto_renew || false);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
             console.error('Error fetching membership:', err);
@@ -134,215 +168,372 @@ const MembershipView = () => {
             setLoading(false);
         }
     };
+    
+    const fetchMembershipTiers = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/membership-tiers`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            if (!response.ok) {
+                console.error('Failed to fetch membership tiers, using fallback data');
+                return;
+            }
+            
+            const data = await response.json();
+            // Only include active tiers
+            const activeTiers = data.filter((tier: MembershipTier) => tier.is_active);
+            setMembershipTiers(activeTiers);
+        } catch (err) {
+            console.error('Error fetching membership tiers:', err);
+        }
+    };
 
     const handleUpgrade = async () => {
+        setError(null);
+        
         try {
-            setError(null);
-            const token = localStorage.getItem('token');
+            if (selectedType === null) {
+                // This means the user wants to cancel their membership
+                console.log("Cancelling membership...");
+                
+                if (!membership || !membership.id) {
+                    throw new Error('No active membership found to cancel');
+                }
+                
+                // Store end date for later use, before any API calls
+                const endDateFormatted = membership.end_date 
+                    ? format(new Date(membership.end_date), 'MMMM d, yyyy')
+                    : 'your due date';
+                console.log(`End date for message: ${endDateFormatted}`);
+                
+                // Use DELETE for cancellation, matching the backend route
+                const url = `${import.meta.env.VITE_API_URL}/api/memberships/${membership.id}`;
+                console.log(`Making cancellation request to: ${url}`);
+                
+                const response = await fetch(url, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                
+                console.log('Cancellation response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Cancellation error response:', errorText);
+                    throw new Error(errorText || 'Failed to cancel membership');
+                }
+                
+                // Set the snackbar message and show it
+                const message = `Your membership has been cancelled and will not be renewed. You will still have access to its benefits until ${endDateFormatted}.`;
+                console.log('Setting snackbar message:', message);
+                setSnackbarMessage(message);
+                setSnackbarOpen(true);
+                console.log('Snackbar should be visible now');
+                
+                // Close dialog and refresh membership data
+                setShowUpgradeDialog(false);
+                await fetchMembership();
+            }
             
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/membership/upgrade`, {
-                method: 'POST',
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to process membership change');
+            console.error("Membership change error:", err);
+        }
+    };
+
+    const handleAutoRenewToggle = async (checked: boolean) => {
+        if (!membership) return;
+        
+        setUpdatingRenewal(true);
+        try {
+            // Use the new dedicated PUT endpoint for updating auto-renew status
+            const url = `${import.meta.env.VITE_API_URL}/api/memberships/${membership.id}/autorenew`; // Changed endpoint
+            console.log(`Making auto-renew request to: ${url}`);
+            console.log('Auto-renew data:', { auto_renew: checked });
+            
+            const response = await fetch(url, {
+                method: 'PUT',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
-                body: JSON.stringify({ type: selectedType })
+                body: JSON.stringify({
+                    auto_renew: checked // Only send auto_renew status
+                })
             });
 
+            console.log('Auto-renew response status:', response.status);
+            
             if (!response.ok) {
-                throw new Error('Failed to upgrade membership');
+                const errorText = await response.text();
+                console.error('Auto-renew error response:', errorText);
+                throw new Error(errorText || 'Failed to update auto-renew setting');
             }
 
-            await fetchMembership();
-            setOpenUpgrade(false);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to upgrade membership');
-            console.error('Error upgrading membership:', err);
+            // Update local state
+            setMembership({ ...membership, auto_renew: checked });
+            setAutoRenew(checked);
+            toast.success(`Auto-renewal ${checked ? 'enabled' : 'disabled'} successfully`);
+        } catch (error) {
+            console.error('Error updating auto-renew:', error);
+            toast.error('Failed to update auto-renewal setting');
+        } finally {
+            setUpdatingRenewal(false);
         }
     };
 
     const getBenefitIcon = (benefit: string) => {
-        if (benefit.includes('insurance')) return <SecurityIcon color="primary" />;
-        if (benefit.includes('booking')) return <CarIcon color="primary" />;
-        if (benefit.includes('discount')) return <DiscountIcon color="primary" />;
-        if (benefit.includes('support')) return <SupportIcon color="primary" />;
-        return <CheckCircleIcon color="primary" />;
+        if (benefit.toLowerCase().includes('discount')) return <DiscountIcon />;
+        if (benefit.toLowerCase().includes('insurance')) return <SecurityIcon />;
+        if (benefit.toLowerCase().includes('booking')) return <CarIcon />;
+        if (benefit.toLowerCase().includes('support')) return <SupportIcon />;
+        return <CheckCircleIcon />;
+    };
+
+    const getMembershipColor = (type: string) => {
+        switch (type) {
+            case 'premium':
+                return '#1976d2';
+            case 'platinum':
+                return '#ffd700';
+            case 'none':
+                return '#9e9e9e';
+            default:
+                return '#757575';
+        }
+    };
+    
+    const getMembershipPrice = (type: string): number => {
+        const tier = membershipTiers.find(t => t.type === type);
+        if (tier) return tier.price;
+        
+        // Fallback to hardcoded prices if tier not found
+        return fallbackMembershipLevels[type as keyof typeof fallbackMembershipLevels]?.price || 0;
+    };
+    
+    const getMembershipBenefits = (type: string): string[] => {
+        const tier = membershipTiers.find(t => t.type === type);
+        if (tier) return tier.benefits;
+        
+        // Fallback to hardcoded benefits if tier not found
+        return fallbackMembershipLevels[type as keyof typeof fallbackMembershipLevels]?.benefits || [];
     };
 
     if (loading) {
         return (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+            <Box display="flex" justifyContent="center" p={5}>
                 <CircularProgress />
             </Box>
         );
     }
 
-    const getMembershipColor = (type: string) => {
-        switch (type) {
-            case 'basic': return 'primary';
-            case 'premium': return 'secondary';
-            case 'platinum': return 'warning';
-            default: return 'default';
-        }
-    };
-
     return (
-        <>
-            <AppBar position="fixed" color="primary">
+        <Box sx={{ bgcolor: '#f7f9fc', minHeight: '100vh' }}>
+            {/* Header style from HelpCenter */}
+            <AppBar position="fixed">
                 <Toolbar>
-                    <IconButton edge="start" color="inherit" onClick={() => navigate('/dashboard')}>
+                    <IconButton
+                        edge="start"
+                        color="inherit"
+                        onClick={() => navigate('/dashboard')}
+                        sx={{ mr: 2 }}
+                        aria-label="Back"
+                    >
                         <ArrowBackIcon />
                     </IconButton>
                     <Box display="flex" alignItems="center" sx={{ flexGrow: 1 }}>
-                        <CardMembershipIcon sx={{ mr: 2 }} />
-                        <Typography variant="h6">Membership Management</Typography>
+                        <CardMembershipIcon sx={{ mr: 1.5 }} />
+                        <Typography variant="h6" component="div">
+                            Membership
+                        </Typography>
                     </Box>
                 </Toolbar>
             </AppBar>
-            <Toolbar />
+            <Toolbar /> {/* Spacer */}
 
-            <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+            <Container maxWidth="lg" sx={{ py: 4 }}>
                 {error && (
-                    <Alert severity="error" sx={{ mb: 3 }}>
+                    <Alert severity="error" sx={{ mb: 4 }}>
                         {error}
                     </Alert>
                 )}
 
-                {membership && (
-                    <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
-                        <Box display="flex" alignItems="center" mb={2}>
-                            <StarIcon sx={{ color: membershipLevels[membership.type].color, mr: 1, fontSize: 32 }} />
-                            <Typography variant="h4">
+                <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: 'bold', color: 'black' }}>
+                    Your Membership
+                </Typography>
+
+                {!membership ? (
+                    <Box sx={{ textAlign: 'center', py: 3 }}>
+                        <Typography variant="h6" color="textSecondary" gutterBottom>
+                            You're currently a non-member
+                        </Typography>
+                        <Typography variant="body1" color="textSecondary" paragraph>
+                            All users start as non-members. Select a membership plan below to enjoy exclusive benefits.
+                        </Typography>
+                    </Box>
+                ) : (
+                    <Paper sx={{ p: 3, borderRadius: 2, mb: 5, borderLeft: 6, borderColor: getMembershipColor(membership.type) }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                            <CardMembershipIcon sx={{ color: getMembershipColor(membership.type), fontSize: 32 }} />
+                            <Typography variant="h5" sx={{ ml: 2, fontWeight: 'bold' }}>
                                 {membership.type.charAt(0).toUpperCase() + membership.type.slice(1)} Membership
                             </Typography>
-                        </Box>
-                        <Divider sx={{ mb: 2 }} />
-                        <Box display="flex" alignItems="center" flexWrap="wrap" gap={2} mb={3}>
-                            <Chip
-                                label={membership.status.toUpperCase()}
-                                color={membership.status === 'active' ? 'success' : 'error'}
-                                sx={{ fontWeight: 'bold', fontSize: '0.9rem', py: 2, px: 1 }}
-                            />
-                            <Chip
-                                label={`Auto-renew: ${membership.auto_renew ? 'Enabled' : 'Disabled'}`}
-                                color={membership.auto_renew ? 'info' : 'default'}
-                                variant="outlined"
+                            <Chip 
+                                label={membership.status}
+                                color={
+                                    membership.status === 'active' ? 'success' : 
+                                    membership.status === 'expired' ? 'warning' : 'error'
+                                }
+                                size="small"
+                                sx={{ ml: 2 }}
                             />
                         </Box>
+
                         <Grid container spacing={3}>
                             <Grid item xs={12} md={6}>
-                                <Card>
-                                    <CardContent>
-                                        <Typography variant="h6" gutterBottom>Membership Details</Typography>
-                                        <List>
-                                            <ListItem>
-                                                <ListItemIcon>
-                                                    <CheckCircleIcon color="primary" />
-                                                </ListItemIcon>
-                                                <ListItemText
-                                                    primary="Start Date"
-                                                    secondary={format(new Date(membership.start_date), 'PPP')}
-                                                />
-                                            </ListItem>
-                                            {membership.end_date && (
-                                                <ListItem>
-                                                    <ListItemIcon>
-                                                        <CheckCircleIcon color="primary" />
-                                                    </ListItemIcon>
-                                                    <ListItemText
-                                                        primary="End Date"
-                                                        secondary={format(new Date(membership.end_date), 'PPP')}
-                                                    />
-                                                </ListItem>
-                                            )}
-                                        </List>
-                                    </CardContent>
-                                </Card>
-                            </Grid>
-                            <Grid item xs={12} md={6}>
-                                <Card>
-                                    <CardContent>
-                                        <Typography variant="h6" gutterBottom>Current Benefits</Typography>
-                                        <List>
-                                            {membershipLevels[membership.type].benefits.map((benefit, index) => (
-                                                <ListItem key={index}>
-                                                    <ListItemIcon>
-                                                        {getBenefitIcon(benefit)}
-                                                    </ListItemIcon>
-                                                    <ListItemText primary={benefit} />
-                                                </ListItem>
-                                            ))}
-                                        </List>
-                                    </CardContent>
-                                </Card>
+                                <Typography variant="subtitle1" gutterBottom>
+                                    Membership Details
+                                </Typography>
+                                <Typography variant="body1" sx={{ mb: 0.5 }}>
+                                    <strong>Start Date:</strong> {format(new Date(membership.start_date), 'PPP')}
+                                </Typography>
+                                <Typography variant="body1" sx={{ mb: 0.5 }}>
+                                    <strong>End Date:</strong> {membership.end_date ? format(new Date(membership.end_date), 'PPP') : 'N/A'}
+                                </Typography>
+                                <Typography variant="body1" sx={{ mb: 0.5 }}>
+                                    <strong>Status:</strong> {membership.status.charAt(0).toUpperCase() + membership.status.slice(1)}
+                                </Typography>
+                                <Typography variant="body1" sx={{ mb: 0.5 }}>
+                                    <strong>Auto-renew:</strong> {membership.auto_renew ? 'Enabled' : 'Disabled'}
+                                </Typography>
+                                
+                                <Box sx={{ mt: 2 }}>
+                                    {membership.status === 'active' && (
+                            <Button
+                                            variant="outlined"
+                                color="error"
+                                onClick={() => {
+                                    setSelectedType(null);
+                                    setShowUpgradeDialog(true);
+                                }}
+                            >
+                                Cancel Membership
+                            </Button>
+                                    )}
+                                            </Box>
+                                        </Grid>
+                                
+                                        <Grid item xs={12} md={6}>
+                                <Typography variant="subtitle1" gutterBottom>
+                                    Your Benefits
+                                </Typography>
+                                <List dense>
+                                    {getMembershipBenefits(membership.type).map((benefit, index) => (
+                                        <ListItem key={index} sx={{ py: 0.5 }}>
+                                            <ListItemIcon sx={{ minWidth: 36 }}>
+                                                {getBenefitIcon(benefit)}
+                                            </ListItemIcon>
+                                            <ListItemText primary={benefit} />
+                                        </ListItem>
+                                    ))}
+                                </List>
                             </Grid>
                         </Grid>
+                        
+                        {membership.status === 'active' && (
+                            <Box 
+                                sx={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    mt: 3,
+                                    pt: 2,
+                                    borderTop: '1px solid rgba(0,0,0,0.1)'
+                                }}
+                            >
+                                <Box sx={{ flexGrow: 1 }}>
+                                    <Typography variant="body1" fontWeight="medium">Auto-Renew</Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Your membership will automatically renew when it expires
+                                    </Typography>
+                                </Box>
+                                <Switch
+                                    checked={!!membership.auto_renew}
+                                    onChange={(_, checked) => handleAutoRenewToggle(checked)}
+                                    disabled={updatingRenewal}
+                                    color="primary"
+                                />
+                            </Box>
+                        )}
                     </Paper>
                 )}
 
-                <Typography variant="h4" gutterBottom sx={{ mt: 6, mb: 3, fontWeight: 'bold' }}>
+                <Typography variant="h4" gutterBottom sx={{ mt: 6, mb: 3, fontWeight: 'bold', color: 'black' }}>
                     Membership Plans
                 </Typography>
 
                 <Grid container spacing={3}>
-                    {Object.entries(membershipLevels).map(([type, details]) => (
-                        <Grid item xs={12} md={4} key={type}>
+                    {(membershipTiers.length > 0 ? 
+                        [
+                            {
+                                type: 'none',
+                                name: 'Non-Member',
+                                price: 0.00,
+                                benefits: [
+                                    'No additional benefits',
+                                    'Standard booking',
+                                    'No discount on rentals',
+                                    'Standard customer support'
+                                ],
+                                is_active: true
+                            },
+                            ...membershipTiers
+                        ] : 
+                        Object.keys(fallbackMembershipLevels).map(type => ({
+                            type,
+                            name: type === 'none' ? 'Non-Member' : type.charAt(0).toUpperCase() + type.slice(1),
+                            price: fallbackMembershipLevels[type as keyof typeof fallbackMembershipLevels].price,
+                            benefits: fallbackMembershipLevels[type as keyof typeof fallbackMembershipLevels].benefits,
+                            is_active: true
+                        }))
+                    ).map((tier) => (
+                        <Grid item xs={12} md={3} key={tier.type}>
                             <Card 
                                 sx={{ 
                                     height: '100%',
-                                    border: membership?.type === type ? 3 : 0,
-                                    borderColor: 'primary.main',
-                                    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                                    '&:hover': { 
-                                        transform: 'translateY(-10px)', 
-                                        boxShadow: 6
-                                    }
+                                    display: 'flex', 
+                                    flexDirection: 'column',
+                                    borderTop: 5, 
+                                    borderColor: getMembershipColor(tier.type),
+                                    opacity: tier.type === 'none' ? 0.9 : 1
                                 }}
+                                elevation={tier.type === membership?.type ? 4 : 1}
                             >
-                                <CardContent sx={{ textAlign: 'center', py: 4 }}>
-                                    <Box position="relative" mb={4}>
-                                        <StarIcon 
-                                            sx={{ 
-                                                fontSize: 60, 
-                                                color: details.color, 
-                                                filter: type === 'platinum' ? 'drop-shadow(0 0 5px rgba(255, 215, 0, 0.7))' : 'none'
-                                            }} 
-                                        />
-                                        {membership?.type === type && (
-                                            <Chip 
-                                                label="CURRENT PLAN" 
-                                                color="success" 
-                                                size="small"
-                                                sx={{ 
-                                                    position: 'absolute', 
-                                                    top: '-15px', 
-                                                    right: '-15px',
-                                                    fontWeight: 'bold',
-                                                    fontSize: '0.7rem'
-                                                }}
-                                            />
-                                        )}
-                                    </Box>
-                                    <Typography 
-                                        variant="h5" 
-                                        component="h2" 
-                                        fontWeight="bold"
-                                        mb={2}
-                                        color={type === 'platinum' ? 'warning.dark' : 'text.primary'}
-                                    >
-                                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                                <CardContent sx={{ flexGrow: 1 }}>
+                                    <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                        {tier.name}
                                     </Typography>
-                                    <Typography variant="h3" color="primary" fontWeight="bold" gutterBottom>
-                                        £{details.price}
-                                        <Typography component="span" variant="subtitle1" color="text.secondary">
-                                            /month
+                                    
+                                    <Typography variant="h4" color="primary" sx={{ mb: 2 }}>
+                                        {tier.type === 'none' ? 'FREE' : `£${tier.price.toFixed(2)}`}
+                                        {tier.type !== 'none' && <Typography variant="caption" sx={{ ml: 1 }}>/month</Typography>}
+                                    </Typography>
+                                    
+                                    {tier.type === 'none' && (
+                                        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
+                                            Default for new users
                                         </Typography>
-                                    </Typography>
-                                    <Divider sx={{ my: 3 }} />
-                                    <List sx={{ textAlign: 'left' }}>
-                                        {details.benefits.map((benefit, index) => (
-                                            <ListItem key={index} sx={{ py: 1 }}>
-                                                <ListItemIcon>
+                                    )}
+                                    
+                                    <Divider sx={{ my: 2 }} />
+                                    
+                                    <List dense>
+                                        {tier.benefits.map((benefit, index) => (
+                                            <ListItem key={index} sx={{ py: 0.5 }}>
+                                                <ListItemIcon sx={{ minWidth: 36 }}>
                                                     {getBenefitIcon(benefit)}
                                                 </ListItemIcon>
                                                 <ListItemText primary={benefit} />
@@ -350,25 +541,30 @@ const MembershipView = () => {
                                         ))}
                                     </List>
                                 </CardContent>
-                                <CardActions sx={{ justifyContent: 'center', p: 3 }}>
+                                
+                                <CardActions sx={{ p: 2, pt: 0 }}>
                                     <Button
                                         fullWidth
-                                        variant="contained"
-                                        color={type === 'platinum' ? 'warning' : 'primary'}
-                                        size="large"
-                                        disabled={membership?.type === type}
+                                        variant={tier.type === membership?.type ? "outlined" : "contained"}
+                                        color="primary"
+                                        disabled={(tier.type === membership?.type && membership.status === 'active') || 
+                                                (tier.type === 'none' && !membership)}
                                         onClick={() => {
-                                            setSelectedType(type as 'basic' | 'premium' | 'platinum');
-                                            setOpenUpgrade(true);
-                                        }}
-                                        sx={{ 
-                                            py: 1.5,
-                                            fontWeight: 'bold',
-                                            fontSize: '1rem'
+                                            setSelectedType(tier.type === 'none' ? null : tier.type as 'basic' | 'premium' | 'platinum');
+                                            setShowUpgradeDialog(true);
                                         }}
                                     >
-                                        {membership?.type === type ? 'Current Plan' : 
-                                        (!membership ? 'Choose Plan' : 'Upgrade')}
+                                        {tier.type === 'none' && !membership
+                                            ? 'Current Status'
+                                            : tier.type === membership?.type && membership.status === 'active' 
+                                            ? 'Current Plan' 
+                                            : tier.type === membership?.type && membership.status === 'cancelled'
+                                            ? 'Reactivate'
+                                            : tier.type === 'none'
+                                            ? 'Cancel Membership'
+                                            : membership 
+                                            ? 'Switch Plan' 
+                                            : 'Select Plan'}
                                     </Button>
                                 </CardActions>
                             </Card>
@@ -376,64 +572,62 @@ const MembershipView = () => {
                     ))}
                 </Grid>
 
-                <Dialog 
-                    open={openUpgrade} 
-                    onClose={() => setOpenUpgrade(false)}
-                    PaperProps={{
-                        sx: { borderRadius: 2, px: 1 }
-                    }}
-                >
-                    <DialogTitle sx={{ pt: 3, px: 3, pb: 1 }}>
-                        <Typography variant="h5" fontWeight="bold">
-                            {!membership ? 'Subscribe to Membership' : 'Upgrade Membership'}
-                        </Typography>
+                <Dialog open={showUpgradeDialog} onClose={() => setShowUpgradeDialog(false)}>
+                    <DialogTitle>
+                        Cancel Membership
                     </DialogTitle>
-                    <DialogContent sx={{ p: 3 }}>
-                        <Box display="flex" alignItems="center" mb={2}>
-                            <StarIcon sx={{ 
-                                color: membershipLevels[selectedType].color, 
-                                mr: 2, 
-                                fontSize: 40,
-                                filter: selectedType === 'platinum' ? 'drop-shadow(0 0 5px rgba(255, 215, 0, 0.7))' : 'none'
-                            }} />
-                            <Typography variant="h6">
-                                {selectedType.charAt(0).toUpperCase() + selectedType.slice(1)} Membership
+                    
+                    <DialogContent>
+                        <>
+                            <Typography variant="body1" paragraph>
+                                Are you sure you want to cancel your {membership?.type} membership?
+                                    </Typography>
+                            
+                            <Typography variant="body1" paragraph>
+                                You will still have access to membership benefits until the end of your current period, but your membership will not renew.
                             </Typography>
-                        </Box>
-                        <Divider sx={{ mb: 3 }} />
-                        <Typography variant="body1" mb={3}>
-                            {!membership 
-                                ? `You are about to subscribe to our ${selectedType} membership plan.` 
-                                : `You are about to upgrade from ${membership.type} to ${selectedType} membership.`}
-                        </Typography>
-                        <Typography variant="body1" fontWeight="bold">
-                            You will be charged £{membershipLevels[selectedType].price} monthly.
-                        </Typography>
-                        <Box mt={2}>
-                            <Typography variant="body2" color="text.secondary">
-                                *By confirming, you agree to our Terms of Service and authorize us to bill your account monthly until you cancel.
-                            </Typography>
-                        </Box>
+                        </>
                     </DialogContent>
-                    <DialogActions sx={{ pb: 3, px: 3 }}>
-                        <Button 
-                            onClick={() => setOpenUpgrade(false)}
-                            variant="outlined"
-                        >
-                            Cancel
+                    
+                    <DialogActions>
+                        <Button onClick={() => setShowUpgradeDialog(false)}>
+                            Back
                         </Button>
                         <Button 
                             onClick={handleUpgrade} 
                             variant="contained" 
-                            color={selectedType === 'platinum' ? 'warning' : 'primary'}
-                            sx={{ fontWeight: 'bold', px: 3 }}
+                            color="error"
                         >
-                            Confirm
+                            Cancel Membership
                         </Button>
                     </DialogActions>
                 </Dialog>
             </Container>
-        </>
+
+            <Snackbar
+                open={snackbarOpen}
+                autoHideDuration={10000}
+                onClose={() => setSnackbarOpen(false)}
+                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+            >
+                <MuiAlert 
+                    elevation={6} 
+                    variant="filled" 
+                    severity="success"
+                    onClose={() => setSnackbarOpen(false)}
+                    sx={{ 
+                        width: '100%',
+                        maxWidth: '600px',
+                        bgcolor: '#ff4444',
+                        '.MuiAlert-message': {
+                            fontSize: '1rem'
+                        }
+                    }}
+                >
+                    {snackbarMessage}
+                </MuiAlert>
+            </Snackbar>
+        </Box>
     );
 };
 

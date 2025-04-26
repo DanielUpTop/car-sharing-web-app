@@ -88,13 +88,13 @@ class MembershipController {
    */
   static async cancelMembership(req, res) {
     try {
-      const { membershipId } = req.body;
+      const { membershipId } = req.params;
       
       if (!membershipId) {
-        return res.status(400).json({ error: 'Membership ID is required' });
+        return res.status(400).json({ error: 'Membership ID is required in the URL' });
       }
 
-      await Membership.cancelMembership(membershipId);
+      await Membership.cancelMembership(parseInt(membershipId, 10));
       return res.status(200).json({ message: 'Membership cancelled successfully' });
     } catch (error) {
       console.error('Error cancelling membership:', error);
@@ -279,6 +279,43 @@ class MembershipController {
     } catch (error) {
       console.error('Error deleting membership:', error);
       return res.status(500).json({ error: 'Failed to delete membership' });
+    }
+  }
+
+  /**
+   * Update a user's auto-renew status for their membership
+   */
+  static async updateAutoRenewStatus(req, res) {
+    try {
+      const { membershipId } = req.params;
+      const { auto_renew } = req.body; // Expecting { "auto_renew": true/false }
+
+      if (!membershipId) {
+        return res.status(400).json({ error: 'Membership ID is required in the URL' });
+      }
+
+      if (typeof auto_renew !== 'boolean') {
+          return res.status(400).json({ error: 'auto_renew field (boolean) is required in the body' });
+      }
+
+      // Add user check: ensure the authenticated user owns this membership
+      const userId = req.user.id;
+      const membership = await Membership.getMembershipById(parseInt(membershipId, 10)); // Need this model function
+
+      if (!membership) {
+          return res.status(404).json({ error: 'Membership not found' });
+      }
+      if (membership.user_id !== userId) {
+          return res.status(403).json({ error: 'User not authorized to update this membership' });
+      }
+
+      await Membership.updateAutoRenew(parseInt(membershipId, 10), auto_renew);
+      return res.status(200).json({ message: `Membership auto-renewal set to ${auto_renew}` });
+
+    } catch (error) {
+      console.error('Error updating auto-renew status:', error);
+      // Check for specific errors if the model throws them, e.g., not found
+      return res.status(500).json({ error: 'Failed to update auto-renew status' });
     }
   }
 }

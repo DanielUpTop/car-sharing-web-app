@@ -31,7 +31,9 @@ import {
     Chip,
     FormControl,
     InputLabel,
-    Select
+    Select,
+    AppBar,
+    Toolbar
 } from '@mui/material';
 import {
     ExpandMore as ExpandMoreIcon,
@@ -289,35 +291,28 @@ const HelpCenter: React.FC = () => {
 
     return (
         <Box sx={{ bgcolor: '#f7f9fc', minHeight: '100vh' }}>
-            {/* Header Banner - Keeping as requested but improving spacing */}
-            <Box 
-                sx={{
-                    bgcolor: '#1976d2',
-                    color: 'white',
-                    py: 2,
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 1000
-                }}
-            >
-                <Container maxWidth="lg">
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <IconButton 
-                            color="inherit" 
-                            onClick={() => navigate('/dashboard')}
-                            sx={{ ml: -1.5, mr: 2 }} // Moved more to the left as requested
-                            aria-label="Back to dashboard"
-                        >
-                            <ArrowBackIcon />
-                        </IconButton>
-                        <LiveHelpIcon sx={{ fontSize: 32, mr: 2 }} />
-                        <Typography variant="h5" component="h1" sx={{ fontWeight: 600 }}>
+            {/* Header copied from UserDashboard and adapted */}
+            <AppBar position="fixed">
+                <Toolbar>
+                    <IconButton
+                        edge="start" // Keep edge="start" from Dashboard
+                        color="inherit"
+                        onClick={() => navigate(-1)} // Use navigate(-1) for back
+                        sx={{ mr: 2 }} // Use default dashboard spacing
+                        aria-label="Back"
+                    >
+                        <ArrowBackIcon />
+                    </IconButton>
+                    <Box display="flex" alignItems="center" sx={{ flexGrow: 1 }}>
+                        <HelpIcon sx={{ mr: 1.5 }} /> {/* Add HelpIcon back, adjust margin */} 
+                        <Typography variant="h6" component="div"> {/* Removed sx={{ flexGrow: 1 }} as Box has it */} 
                             Help Center
                         </Typography>
                     </Box>
-                </Container>
-            </Box>
+                    {/* Removed dashboard-specific icons (Refresh, Download) */}
+                </Toolbar>
+            </AppBar>
+            <Toolbar /> {/* Spacer */}
 
             <Container maxWidth="lg" sx={{ py: 4 }}>
                 {/* Quick Access Cards - Added for better UX */}

@@ -1,4 +1,8 @@
 const isAdmin = (req, res, next) => {
+    // Add log here to see the user object received by the middleware
+    console.log('[adminAuth] Middleware executing...');
+    console.log('[adminAuth] Received req.user:', JSON.stringify(req.user, null, 2)); 
+
     console.log('Checking admin authorization');
     console.log('Request user:', req.user);
     console.log('User role:', req.user?.role);

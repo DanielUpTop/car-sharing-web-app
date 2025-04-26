@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Dialog,
     DialogTitle,
@@ -13,18 +13,23 @@ import {
     Step,
     StepLabel,
     Paper,
-    styled
+    styled,
+    Grid,
+    Divider,
+    Chip,
+    Tooltip
 } from '@mui/material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DateTimeValidationError } from '@mui/x-date-pickers';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import MuiAlert from '@mui/material/Alert';
 import PaymentProvider from '../payments/PaymentProvider';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../api/axios';
+import { ArrowUpward } from '@mui/icons-material';
 
 // Styled components
 const StyledDialog = styled(Dialog)(({ theme }) => ({
@@ -59,6 +64,7 @@ interface Car {
     pricePerHour: number;
     image: string;
     address: string;
+    required_membership?: 'none' | 'basic' | 'premium' | 'platinum';
 }
 
 interface BookingDialogProps {
@@ -80,13 +86,104 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
     const [showSuccess, setShowSuccess] = useState(false);
     const [clientSecret, setClientSecret] = useState<string>('');
     const { user } = useAuth();
+    const [membership, setMembership] = useState<any>(null);
+    const [membershipLoading, setMembershipLoading] = useState(true);
+    const [originalPrice, setOriginalPrice] = useState<number>(0);
+    const [discountedPrice, setDiscountedPrice] = useState<number>(0);
+    const [discountPercentage, setDiscountPercentage] = useState<number>(0);
 
-    const calculateTotalPrice = () => {
+    useEffect(() => {
+        if (user) {
+            fetchMembership();
+        } else {
+            setMembershipLoading(false);
+        }
+    }, [user]);
+
+    const fetchMembership = async () => {
+        try {
+            setMembershipLoading(true);
+            const token = localStorage.getItem('token');
+            
+            if (!token) {
+                setMembershipLoading(false);
+                return;
+            }
+
+            const response = await fetch(
+                `${import.meta.env.VITE_API_URL}/api/memberships`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                }
+            );
+
+            if (response.status === 404) {
+                // User doesn't have a membership
+                setMembership(null);
+                setDiscountPercentage(0);
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch membership data');
+            }
+
+            const data = await response.json();
+            setMembership(data);
+            
+            // Set discount percentage based on membership type
+            switch (data.type) {
+                case 'basic':
+                    setDiscountPercentage(5);
+                    break;
+                case 'premium':
+                    setDiscountPercentage(10);
+                    break;
+                case 'platinum':
+                    setDiscountPercentage(15);
+                    break;
+                default:
+                    setDiscountPercentage(0);
+            }
+        } catch (err) {
+            console.error('Error fetching membership:', err);
+            setMembership(null);
+            setDiscountPercentage(0);
+        } finally {
+            setMembershipLoading(false);
+        }
+    };
+
+    // Calculate prices whenever dates or membership changes
+    useEffect(() => {
         if (startDate && endDate) {
             const hours = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60));
             const rawPrice = car.pricePerHour * hours;
             // Format to 2 decimal places and convert back to number to ensure clean decimal
             const price = parseFloat(rawPrice.toFixed(2));
+            
+            // Store the original price
+            setOriginalPrice(price);
+            
+            // Apply membership discount if applicable
+            if (membership && discountPercentage > 0) {
+                const discounted = parseFloat((price * (1 - discountPercentage / 100)).toFixed(2));
+                setDiscountedPrice(discounted);
+                
+                console.log('Price calculation with membership discount:', {
+                    startDate: startDate.toISOString(),
+                    endDate: endDate.toISOString(),
+                    hours,
+                    pricePerHour: car.pricePerHour,
+                    rawPrice,
+                    originalPrice: price,
+                    membershipType: membership.type,
+                    discountPercentage,
+                    discountedPrice: discounted
+                });
+            } else {
             console.log('Price calculation:', {
                 startDate: startDate.toISOString(),
                 endDate: endDate.toISOString(),
@@ -95,9 +192,22 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                 rawPrice,
                 formattedPrice: price
             });
-            return price;
+                
+                // No discount
+                setDiscountedPrice(0);
+            }
+        } else {
+            setOriginalPrice(0);
+            setDiscountedPrice(0);
         }
-        return 0;
+    }, [startDate, endDate, membership, discountPercentage, car.pricePerHour]);
+
+    // Pure function that doesn't set state - just calculates the final price
+    const calculateTotalPrice = () => {
+        if (membership && discountPercentage > 0 && discountedPrice > 0) {
+            return discountedPrice;
+        }
+        return originalPrice;
     };
 
     const formatDateForMySQL = (date: Date) => {
@@ -140,6 +250,12 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
 
             if (endDate < startDate) {
                 setError('End date cannot be before start date');
+                return;
+            }
+
+            // Check if user has the required membership level
+            if (!isMembershipSufficient()) {
+                setError(`You need ${car.required_membership} membership or higher to book this car. Please upgrade your membership to continue.`);
                 return;
             }
 
@@ -210,7 +326,13 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                 start_date: formattedStartDate,
                 end_date: formattedEndDate,
                 total_price: finalPrice,
-                payment_intent_id: paymentIntentId
+                payment_intent_id: paymentIntentId,
+                membership_discount: membership && discountPercentage > 0 ? {
+                    membership_type: membership.type,
+                    original_price: originalPrice,
+                    discount_percentage: discountPercentage,
+                    discount_amount: originalPrice - finalPrice
+                } : null
             };
             console.log('[handlePaymentSuccess] Preparing to POST booking data:', bookingData);
 
@@ -244,6 +366,29 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
         }
     };
 
+    const isMembershipSufficient = () => {
+        if (!car.required_membership || car.required_membership === 'none') {
+            return true;
+        }
+
+        if (!membership) {
+            return false;
+        }
+
+        const membershipLevels = {
+            'none': 0,
+            'basic': 1,
+            'premium': 2,
+            'platinum': 3
+        };
+
+        // Add type guard to ensure membership.type is a valid key
+        const membershipType = membership.type as keyof typeof membershipLevels;
+        const requiredType = car.required_membership as keyof typeof membershipLevels;
+        
+        return membershipLevels[membershipType] >= membershipLevels[requiredType];
+    };
+
     const renderStepContent = () => {
         switch (activeStep) {
             case 0:
@@ -252,6 +397,42 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                         <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
                             Select your booking dates for {car.make} {car.model}
                         </Typography>
+                        
+                        {car.required_membership && car.required_membership !== 'none' && (
+                            <Alert 
+                                severity={isMembershipSufficient() ? "info" : "warning"} 
+                                sx={{ 
+                                    mb: 3,
+                                    borderLeft: !isMembershipSufficient() ? '4px solid #f44336' : undefined,
+                                    backgroundColor: !isMembershipSufficient() ? 'rgba(244, 67, 54, 0.1)' : undefined
+                                }}
+                            >
+                                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                                    {isMembershipSufficient() 
+                                        ? `This car requires ${car.required_membership} membership which you have.` 
+                                        : `This car is reserved for members with ${car.required_membership} membership or higher.`
+                                    }
+                                </Typography>
+                                {!isMembershipSufficient() && (
+                                    <>
+                                        <Typography variant="body2" sx={{ mb: 1 }}>
+                                            You'll need to upgrade your membership before you can book this vehicle.
+                                        </Typography>
+                                        <Button 
+                                            variant="contained" 
+                                            color="error" 
+                                            size="small"
+                                            onClick={() => navigate('/membership')}
+                                            sx={{ mt: 1, fontWeight: 'bold' }}
+                                            startIcon={<ArrowUpward />}
+                                        >
+                                            Upgrade Membership
+                                        </Button>
+                                    </>
+                                )}
+                            </Alert>
+                        )}
+
                         <LocalizationProvider dateAdapter={AdapterDateFns}>
                             <Box sx={{ 
                                 display: 'flex', 
@@ -325,9 +506,43 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                                     borderRadius: 2
                                 }}
                             >
+                                {membership && discountPercentage > 0 ? (
+                                    <>
+                                        <Box display="flex" alignItems="center" mb={1}>
+                                            <Typography variant="body2" sx={{ color: 'primary.contrastText', mr: 1 }}>
+                                                Original Price:
+                                            </Typography>
+                                            <Typography 
+                                                variant="body2" 
+                                                sx={{ 
+                                                    textDecoration: 'line-through',
+                                                    color: 'primary.contrastText',
+                                                    opacity: 0.7
+                                                }}
+                                            >
+                                                £{originalPrice.toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                        <Box display="flex" justifyContent="space-between" alignItems="center">
+                                            <Typography variant="h6" sx={{ color: 'primary.contrastText' }}>
+                                                Total Price: £{calculateTotalPrice().toFixed(2)}
+                                            </Typography>
+                                            <Chip 
+                                                label={`${discountPercentage}% off`}
+                                                color="success"
+                                                size="small"
+                                                sx={{ fontWeight: 'bold' }}
+                                            />
+                                        </Box>
+                                        <Typography variant="caption" sx={{ color: 'primary.contrastText', mt: 1, display: 'block' }}>
+                                            {membership.type.charAt(0).toUpperCase() + membership.type.slice(1)} membership discount applied
+                                        </Typography>
+                                    </>
+                                ) : (
                                 <Typography variant="h6" sx={{ color: 'primary.contrastText' }}>
                                     Total Price: £{calculateTotalPrice().toFixed(2)}
                                 </Typography>
+                                )}
                             </Paper>
                         )}
                     </Box>
@@ -346,42 +561,125 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                                 borderRadius: 2
                             }}
                         >
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                <Box>
-                                    <Typography variant="subtitle2" color="text.secondary">
-                                        Vehicle
-                                    </Typography>
-                                    <Typography variant="body1">
+                            <Box sx={{ mb: 2 }}>
+                                <Typography variant="subtitle1" fontWeight="bold">
                                         {car.make} {car.model}
                                     </Typography>
+                                <Typography variant="body2" color="textSecondary">
+                                    {car.address}
+                                </Typography>
                                 </Box>
-                                <Box>
-                                    <Typography variant="subtitle2" color="text.secondary">
+                            
+                            <Box sx={{ mb: 2 }}>
+                                <Grid container spacing={2}>
+                                    <Grid item xs={6}>
+                                        <Typography variant="body2" color="textSecondary">
                                         Start Date
                                     </Typography>
                                     <Typography variant="body1">
-                                        {startDate?.toLocaleString()}
+                                            {format(startDate!, 'PP')}
+                                        </Typography>
+                                        <Typography variant="body2">
+                                            {format(startDate!, 'p')}
                                     </Typography>
-                                </Box>
-                                <Box>
-                                    <Typography variant="subtitle2" color="text.secondary">
+                                    </Grid>
+                                    <Grid item xs={6}>
+                                        <Typography variant="body2" color="textSecondary">
                                         End Date
                                     </Typography>
                                     <Typography variant="body1">
-                                        {endDate?.toLocaleString()}
+                                            {format(endDate!, 'PP')}
+                                        </Typography>
+                                        <Typography variant="body2">
+                                            {format(endDate!, 'p')}
+                                        </Typography>
+                                    </Grid>
+                                </Grid>
+                            </Box>
+                            
+                            <Box sx={{ mb: 3 }}>
+                                <Typography variant="body2" color="textSecondary">
+                                    Duration
+                                </Typography>
+                                <Typography variant="body1">
+                                    {Math.ceil((endDate!.getTime() - startDate!.getTime()) / (1000 * 60 * 60))} hours
+                                </Typography>
+                            </Box>
+                            
+                            <Divider sx={{ mb: 2 }} />
+                            
+                            <Box sx={{ mb: 2 }}>
+                                <Typography variant="body2" color="textSecondary">
+                                    Hourly Rate
+                                </Typography>
+                                <Typography variant="body1">
+                                    £{car.pricePerHour.toFixed(2)}
+                                </Typography>
+                            </Box>
+                            
+                            {membership && discountPercentage > 0 && (
+                                <Box sx={{ mb: 2, p: 2, bgcolor: 'success.light', borderRadius: 2 }}>
+                                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                                        Membership Discount Applied
                                     </Typography>
+                                    <Typography variant="body2" color="textSecondary">
+                                        Original Price
+                                    </Typography>
+                                    <Typography 
+                                        variant="body1" 
+                                        sx={{ 
+                                            textDecoration: 'line-through',
+                                            color: 'text.secondary'
+                                        }}
+                                    >
+                                        £{originalPrice.toFixed(2)}
+                                    </Typography>
+                                    
+                                    <Box 
+                                        sx={{ 
+                                            display: 'flex', 
+                                            alignItems: 'center',
+                                            mt: 1
+                                        }}
+                                    >
+                                        <Chip 
+                                            label={`${discountPercentage}% ${membership.type} discount`}
+                                            color="success"
+                                            size="small"
+                                            sx={{ mr: 1, fontWeight: 'bold' }}
+                                        />
+                                        <Typography 
+                                            variant="body2" 
+                                            color="success.dark"
+                                            fontWeight="bold"
+                                        >
+                                            You save £{(originalPrice - calculateTotalPrice()).toFixed(2)}
+                                        </Typography>
+                                    </Box>
                                 </Box>
-                                <Box>
-                                    <Typography variant="subtitle2" color="text.secondary">
-                                        Total Price
-                                    </Typography>
-                                    <Typography variant="h6" color="primary.main">
-                                        £{calculateTotalPrice().toFixed(2)}
-                                    </Typography>
-                                </Box>
+                            )}
+                            
+                            <Box sx={{ mb: 3, p: 2, bgcolor: 'primary.light', borderRadius: 2 }}>
+                                <Typography variant="body2" color="primary.contrastText">
+                                    Total Price
+                                </Typography>
+                                <Typography 
+                                    variant="h5" 
+                                    color="primary.contrastText" 
+                                    fontWeight="bold"
+                                >
+                                    £{calculateTotalPrice().toFixed(2)}
+                                    {membership && discountPercentage > 0 && (
+                                        <Typography component="span" variant="caption" sx={{ ml: 1 }}>
+                                            (with {membership.type} discount)
+                                        </Typography>
+                                    )}
+                                </Typography>
                             </Box>
                         </Paper>
-                        {clientSecret && (
+                        
+                        {/* Temporarily commented out for debugging admin login issue */}
+                        {/* {clientSecret && (
                             <Box sx={{ mt: 3 }}>
                                 <PaymentProvider
                                     clientSecret={clientSecret}
@@ -390,7 +688,7 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                                     amount={calculateTotalPrice()}
                                 />
                             </Box>
-                        )}
+                        )} */}
                     </Box>
                 );
             default:
@@ -418,8 +716,42 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                         ))}
                     </StyledStepper>
                     {error && (
-                        <Alert severity="error" sx={{ mt: 2, borderRadius: 1 }}>
+                        <Alert 
+                            severity="error" 
+                            sx={{ 
+                                mt: 2, 
+                                mb: 2,
+                                ...(error.includes('membership') && {
+                                    padding: 2,
+                                    border: '1px solid #f44336',
+                                    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'flex-start',
+                                    '& .MuiAlert-message': {
+                                        marginBottom: 1
+                                    }
+                                })
+                            }}
+                        >
                             {error}
+                            {error.includes('membership') && (
+                                <Button 
+                                    variant="contained" 
+                                    color="primary"
+                                    onClick={() => navigate('/membership')}
+                                    sx={{ 
+                                        mt: 1,
+                                        fontWeight: 'bold',
+                                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                                        '&:hover': {
+                                            boxShadow: '0 6px 8px rgba(0,0,0,0.15)',
+                                        }
+                                    }}
+                                >
+                                    Upgrade Membership
+                                </Button>
+                            )}
                         </Alert>
                     )}
                     {renderStepContent()}
@@ -442,10 +774,18 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                         </Button>
                     )}
                     {activeStep === 0 && (
+                        <Tooltip
+                            title={!isMembershipSufficient() ? 
+                                `You need ${car.required_membership} membership to book this car` : 
+                                (!startDate || !endDate ? "Please select dates" : "")}
+                            placement="top"
+                            arrow
+                        >
+                            <span>
                         <Button
                             onClick={handleNext}
                             variant="contained"
-                            disabled={loading || !startDate || !endDate}
+                                    disabled={loading || !startDate || !endDate || !isMembershipSufficient()}
                             sx={{ 
                                 borderRadius: 2,
                                 minWidth: 100
@@ -453,6 +793,8 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                         >
                             {loading ? 'Processing...' : 'Next'}
                         </Button>
+                            </span>
+                        </Tooltip>
                     )}
                 </DialogActions>
             </StyledDialog>

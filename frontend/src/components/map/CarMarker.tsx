@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import {
@@ -8,7 +8,13 @@ import {
     Button,
     Chip,
     Divider,
-    Paper
+    Paper,
+    Tooltip,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Alert
 } from '@mui/material';
 import ElectricCarIcon from '@mui/icons-material/ElectricCar';
 import LocalGasStationIcon from '@mui/icons-material/LocalGasStation';
@@ -49,26 +55,147 @@ interface CarMarkerProps {
         location: [number, number];
         image: string;
         address: string;
+        required_membership?: 'none' | 'basic' | 'premium' | 'platinum';
     };
 }
 
 const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
     const [openBooking, setOpenBooking] = React.useState(false);
     const navigate = useNavigate();
+    const [userMembership, setUserMembership] = useState<string | null>(null);
+    const [membershipLoading, setMembershipLoading] = useState(true);
+    const [showMembershipMessage, setShowMembershipMessage] = useState(false);
+
+    // Fetch user's membership on component mount
+    useEffect(() => {
+        const fetchMembership = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    setUserMembership(null);
+                    setMembershipLoading(false);
+                    return;
+                }
+
+                const response = await fetch(
+                    `${import.meta.env.VITE_API_URL}/api/memberships`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    }
+                );
+
+                if (response.status === 404) {
+                    setUserMembership(null);
+                } else if (response.ok) {
+                    const data = await response.json();
+                    setUserMembership(data.type);
+                }
+            } catch (err) {
+                console.error('Error fetching membership:', err);
+                setUserMembership(null);
+            } finally {
+                setMembershipLoading(false);
+            }
+        };
+
+        fetchMembership();
+    }, []);
 
     const handleOpenBooking = () => {
-        setOpenBooking(true);
+        if (isMembershipSufficient()) {
+            setOpenBooking(true);
+        } else {
+            // Show membership message instead of redirecting
+            setShowMembershipMessage(true);
+        }
     };
 
     const handleCloseBooking = () => {
         setOpenBooking(false);
     };
 
+    const handleCloseMembershipMessage = () => {
+        setShowMembershipMessage(false);
+    };
+
+    const navigateToMembership = () => {
+        console.log('Navigating to membership page');
+        handleCloseMembershipMessage(); // Close the dialog first
+        // Navigate with a small delay to ensure UI updates properly
+        setTimeout(() => {
+            navigate('/dashboard/membership');
+        }, 100);
+    };
+
+    // Check if user meets membership requirements
+    const isMembershipSufficient = () => {
+        if (!car.required_membership || car.required_membership === 'none') {
+            return true;
+        }
+
+        if (!userMembership) {
+            return false;
+        }
+
+        const membershipLevels = {
+            'none': 0,
+            'basic': 1,
+            'premium': 2,
+            'platinum': 3
+        };
+
+        return membershipLevels[userMembership as keyof typeof membershipLevels] >= 
+               membershipLevels[car.required_membership as keyof typeof membershipLevels];
+    };
+
+    // Get color for membership badge
+    const getMembershipColor = (membershipType: string) => {
+        switch (membershipType) {
+            case 'platinum': return '#FFD700'; // Gold
+            case 'premium': return '#1976d2';  // Blue
+            case 'basic': return '#2E7D32';    // Green
+            default: return '#757575';         // Grey
+        }
+    };
+
+    // Get button text based on membership status
+    const getButtonText = () => {
+        if (membershipLoading) return 'Loading...';
+        
+        if (!isMembershipSufficient()) {
+            return `Requires ${car.required_membership}`;
+        }
+        
+        return 'Select car';
+    };
+
     return (
         <>
             <Marker position={car.location} icon={carIcon}>
                 <Popup className="car-popup">
-                    <Paper elevation={0} sx={{ minWidth: 300, overflow: 'hidden' }}>
+                    <Paper elevation={0} sx={{ minWidth: 300, overflow: 'hidden', position: 'relative' }}>
+                        {/* Add membership badge */}
+                        {car.required_membership && car.required_membership !== 'none' && (
+                            <Box 
+                                sx={{ 
+                                    position: 'absolute', 
+                                    top: 0, 
+                                    right: 0, 
+                                    backgroundColor: getMembershipColor(car.required_membership),
+                                    color: 'white',
+                                    padding: '4px 8px',
+                                    borderBottomLeftRadius: '8px',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.75rem',
+                                    zIndex: 2
+                                }}
+                            >
+                                {car.required_membership.toUpperCase()} ONLY
+                            </Box>
+                        )}
+                        
                         <Box sx={{ 
                             p: 0,
                             borderRadius: '8px 8px 0 0',
@@ -115,18 +242,22 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
                                         £{Number(car.price_per_hour).toFixed(2)}/hr
                                     </Typography>
                                 </Box>
-                                <Button 
-                                    variant="contained" 
-                                    color="primary"
-                                    onClick={handleOpenBooking}
-                                    sx={{ 
-                                        textTransform: 'none',
-                                        fontWeight: 'bold',
-                                        px: 3
-                                    }}
-                                >
-                                    Select car
-                                </Button>
+                                <Tooltip title={!isMembershipSufficient() ? `Upgrade to ${car.required_membership} membership to book this car` : ""}>
+                                    <span>
+                                        <Button 
+                                            variant="contained" 
+                                            color={!isMembershipSufficient() ? "warning" : "primary"}
+                                            onClick={handleOpenBooking}
+                                            sx={{ 
+                                                textTransform: 'none',
+                                                fontWeight: 'bold',
+                                                px: 3
+                                            }}
+                                        >
+                                            {getButtonText()}
+                                        </Button>
+                                    </span>
+                                </Tooltip>
                             </Box>
                         </Box>
                     </Paper>
@@ -143,10 +274,52 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
                     type: car.type,
                     pricePerHour: Number(car.price_per_hour),
                     image: car.image,
-                    address: car.address
+                    address: car.address,
+                    required_membership: car.required_membership
                 }}
                 onBookingComplete={() => navigate('/dashboard/bookings')}
             />
+
+            {/* Membership Requirement Dialog */}
+            <Dialog 
+                open={showMembershipMessage} 
+                onClose={handleCloseMembershipMessage}
+                PaperProps={{
+                    sx: { borderRadius: 2, maxWidth: 500 }
+                }}
+            >
+                <DialogTitle sx={{ pt: 3, pb: 1 }}>
+                    <Typography variant="h5" fontWeight="bold" color="warning.main">
+                        Membership Required
+                    </Typography>
+                </DialogTitle>
+                <DialogContent>
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                        This vehicle requires a {car.required_membership} membership.
+                    </Alert>
+                    <Typography variant="body1" paragraph>
+                        To book the {car.make} {car.model}, you need to upgrade your membership to {car.required_membership} or higher.
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 2 }}>
+                        {userMembership ? 
+                            `Your current membership level (${userMembership}) doesn't meet the requirement.` : 
+                            "You currently don't have an active membership."}
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 3 }}>
+                    <Button onClick={handleCloseMembershipMessage} variant="outlined">
+                        Close
+                    </Button>
+                    <Button 
+                        onClick={navigateToMembership} 
+                        variant="contained" 
+                        color="warning"
+                        sx={{ fontWeight: 'bold' }}
+                    >
+                        View Bookings
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </>
     );
 };

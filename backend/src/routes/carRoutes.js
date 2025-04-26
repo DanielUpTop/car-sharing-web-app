@@ -3,6 +3,7 @@ const router = express.Router();
 const Car = require('../models/carModel');
 const authenticateToken = require('../middleware/authenticateToken');
 const db = require('../config/dbConfig');
+const getUserMembership = require('../utils/userUtils').getUserMembership;
 
 // Get all cars
 router.get('/', async (req, res) => {
@@ -18,24 +19,50 @@ router.get('/', async (req, res) => {
 // Public route for available cars
 router.get('/available', async (req, res) => {
     try {
+        // Get user membership if user is authenticated (for informational purposes only)
+        let userMembership = 'none';
+        if (req.headers.authorization) {
+            try {
+                const token = req.headers.authorization.split(' ')[1];
+                if (token) {
+                    const decoded = require('jsonwebtoken').verify(token, process.env.JWT_SECRET);
+                    const userId = decoded.id;
+                    const membershipData = await getUserMembership(userId);
+                    if (membershipData) {
+                        userMembership = membershipData.type;
+                    }
+                }
+            } catch (err) {
+                console.error('Error checking user membership:', err);
+            }
+        }
+
+        console.log('User membership level (informational only):', userMembership);
+
+        // Use a direct approach to exclude cars with pending or confirmed bookings
         const query = `
             SELECT c.*, 
                    c.address,
-                   c.location,
-                   COALESCE(b.status, 'none') as booking_status
+                   c.location
             FROM cars c
-            LEFT JOIN bookings b ON c.id = b.car_id 
-                AND b.status NOT IN ('cancelled', 'completed')
-                AND NOW() BETWEEN b.start_date AND b.end_date
             WHERE c.availability_status = 'available'
-            AND (b.id IS NULL OR b.status = 'cancelled')
+            AND c.id NOT IN (
+                SELECT car_id 
+                FROM bookings 
+                WHERE status IN ('pending', 'confirmed')
+                AND (
+                    (NOW() BETWEEN start_date AND end_date) OR
+                    (start_date > NOW() AND start_date < DATE_ADD(NOW(), INTERVAL 7 DAY))
+                )
+            )
         `;
         const [cars] = await db.query(query);
         
         // Process cars to ensure address is properly set
         const processedCars = cars.map(car => ({
             ...car,
-            address: car.address || car.location || 'No location set for this vehicle'
+            address: car.address || car.location || 'No location set for this vehicle',
+            required_membership: car.required_membership // Include this in response
         }));
         
         res.json(processedCars);

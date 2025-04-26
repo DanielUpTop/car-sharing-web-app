@@ -64,17 +64,16 @@ interface AnalyticsData {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const Analytics = () => {
-    const { token } = useAuth();
+    const { } = useAuth();
+    const [token, setToken] = useState(localStorage.getItem('token'));
     const [timeFrame, setTimeFrame] = useState('month');
     const [data, setData] = useState<AnalyticsData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (token) {
-            fetchAnalytics();
-        }
-    }, [timeFrame, token]);
+        fetchAnalytics();
+    }, [timeFrame]);
 
     const fetchAnalytics = async () => {
         try {

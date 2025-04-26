@@ -34,6 +34,9 @@ import BookingManagement from './components/admin/BookingManagement'
 import Analytics from './components/admin/Analytics'
 import ChatArchive from './components/admin/chat/ChatArchive'
 import SupportTickets from './components/admin/support/SupportTickets'
+import AdminHelpCenter from './components/admin/help/AdminHelpCenter'
+import MembershipManagement from './components/admin/MembershipManagement'
+import InsuranceManagement from './components/admin/InsuranceManagement'
 
 // Auth Context
 import { AuthProvider } from './contexts/AuthContext'
@@ -79,10 +82,14 @@ function App() {
                 <Route path="cars" element={<CarManagement />} />
                 <Route path="users" element={<UserManagement />} />
                 <Route path="bookings" element={<BookingManagement />} />
+                <Route path="members" element={<MembershipManagement />} />
+                <Route path="insurance" element={<InsuranceManagement />} />
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="chat" element={<AdminChat />} />
                 <Route path="chat-archive" element={<ChatArchive />} />
                 <Route path="tickets" element={<SupportTickets />} />
+                <Route path="help/manage" element={<AdminHelpCenter />} />
+                <Route path="help/analytics" element={<Analytics />} />
               </Route>
 
               {/* Catch all route */}

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/dbConfig');
 const authenticateToken = require('../middleware/authenticateToken');
+const isAdmin = require('../middleware/isAdmin');
 
 // Get all FAQs
 router.get('/faqs', authenticateToken, async (req, res) => {
@@ -468,5 +469,294 @@ async function getSupportTicketsStructure() {
     `);
     return columns;
 }
+
+// Get all help categories
+router.get('/categories', authenticateToken, async (req, res) => {
+    console.log('GET /categories request received');
+    try {
+        const [categories] = await db.query('SELECT * FROM help_categories ORDER BY `order`');
+        console.log('Categories fetched:', categories.length);
+        res.json(categories);
+    } catch (error) {
+        console.error('Error fetching help categories:', error);
+        res.status(500).json({ message: 'Error fetching help categories' });
+    }
+});
+
+// Get a specific category
+router.get('/categories/:id', authenticateToken, async (req, res) => {
+    console.log(`GET /categories/${req.params.id} request received`);
+    try {
+        const { id } = req.params;
+        const [category] = await db.query('SELECT * FROM help_categories WHERE id = ?', [id]);
+        
+        if (!category.length) {
+            return res.status(404).json({ message: 'Category not found' });
+        }
+        
+        res.json(category[0]);
+    } catch (error) {
+        console.error(`Error fetching category ${req.params.id}:`, error);
+        res.status(500).json({ message: 'Error fetching category' });
+    }
+});
+
+// Create a new category (admin only)
+router.post('/categories', authenticateToken, isAdmin, async (req, res) => {
+    console.log('POST /categories request received');
+    try {
+        const { name, description, order } = req.body;
+        
+        if (!name) {
+            return res.status(400).json({ message: 'Category name is required' });
+        }
+        
+        const [result] = await db.query(
+            'INSERT INTO help_categories (name, description, `order`) VALUES (?, ?, ?)',
+            [name, description || '', order || 0]
+        );
+        
+        const [newCategory] = await db.query('SELECT * FROM help_categories WHERE id = ?', [result.insertId]);
+        
+        console.log('New category created:', newCategory[0]);
+        res.status(201).json(newCategory[0]);
+    } catch (error) {
+        console.error('Error creating help category:', error);
+        res.status(500).json({ message: 'Error creating help category' });
+    }
+});
+
+// Update a category (admin only)
+router.put('/categories/:id', authenticateToken, isAdmin, async (req, res) => {
+    console.log(`PUT /categories/${req.params.id} request received`);
+    try {
+        const { id } = req.params;
+        const { name, description, order } = req.body;
+        
+        if (!name) {
+            return res.status(400).json({ message: 'Category name is required' });
+        }
+        
+        await db.query(
+            'UPDATE help_categories SET name = ?, description = ?, `order` = ? WHERE id = ?',
+            [name, description || '', order || 0, id]
+        );
+        
+        const [updatedCategory] = await db.query('SELECT * FROM help_categories WHERE id = ?', [id]);
+        
+        if (!updatedCategory.length) {
+            return res.status(404).json({ message: 'Category not found' });
+        }
+        
+        console.log('Category updated:', updatedCategory[0]);
+        res.json(updatedCategory[0]);
+    } catch (error) {
+        console.error(`Error updating category ${req.params.id}:`, error);
+        res.status(500).json({ message: 'Error updating category' });
+    }
+});
+
+// Delete a category (admin only)
+router.delete('/categories/:id', authenticateToken, isAdmin, async (req, res) => {
+    console.log(`DELETE /categories/${req.params.id} request received`);
+    try {
+        const { id } = req.params;
+        
+        // Check if category exists
+        const [category] = await db.query('SELECT * FROM help_categories WHERE id = ?', [id]);
+        
+        if (!category.length) {
+            return res.status(404).json({ message: 'Category not found' });
+        }
+        
+        // Delete the category (will cascade delete articles if foreign key is set up properly)
+        await db.query('DELETE FROM help_categories WHERE id = ?', [id]);
+        
+        console.log('Category deleted:', id);
+        res.json({ message: 'Category deleted successfully' });
+    } catch (error) {
+        console.error(`Error deleting category ${req.params.id}:`, error);
+        res.status(500).json({ message: 'Error deleting category' });
+    }
+});
+
+// Get all help articles
+router.get('/articles', authenticateToken, async (req, res) => {
+    console.log('GET /articles request received');
+    try {
+        const [articles] = await db.query(`
+            SELECT a.*, c.name as category_name 
+            FROM help_articles a
+            LEFT JOIN help_categories c ON a.category_id = c.id
+            ORDER BY a.category_id, a.order
+        `);
+        console.log('Articles fetched:', articles.length);
+        res.json(articles);
+    } catch (error) {
+        console.error('Error fetching help articles:', error);
+        res.status(500).json({ message: 'Error fetching help articles' });
+    }
+});
+
+// Get articles by category
+router.get('/categories/:categoryId/articles', authenticateToken, async (req, res) => {
+    console.log(`GET /categories/${req.params.categoryId}/articles request received`);
+    try {
+        const { categoryId } = req.params;
+        const [articles] = await db.query(
+            'SELECT * FROM help_articles WHERE category_id = ? ORDER BY `order`',
+            [categoryId]
+        );
+        
+        console.log(`Fetched ${articles.length} articles for category ${categoryId}`);
+        res.json(articles);
+    } catch (error) {
+        console.error(`Error fetching articles for category ${req.params.categoryId}:`, error);
+        res.status(500).json({ message: 'Error fetching articles' });
+    }
+});
+
+// Get a specific article
+router.get('/articles/:id', authenticateToken, async (req, res) => {
+    console.log(`GET /articles/${req.params.id} request received`);
+    try {
+        const { id } = req.params;
+        const [article] = await db.query(`
+            SELECT a.*, c.name as category_name 
+            FROM help_articles a
+            LEFT JOIN help_categories c ON a.category_id = c.id
+            WHERE a.id = ?
+        `, [id]);
+        
+        if (!article.length) {
+            return res.status(404).json({ message: 'Article not found' });
+        }
+        
+        res.json(article[0]);
+    } catch (error) {
+        console.error(`Error fetching article ${req.params.id}:`, error);
+        res.status(500).json({ message: 'Error fetching article' });
+    }
+});
+
+// Create a new article (admin only)
+router.post('/articles', authenticateToken, isAdmin, async (req, res) => {
+    console.log('POST /articles request received');
+    try {
+        const { category_id, title, content, order, is_published } = req.body;
+        
+        if (!title || !content || !category_id) {
+            return res.status(400).json({ message: 'Title, content, and category ID are required' });
+        }
+        
+        // Verify category exists
+        const [category] = await db.query('SELECT * FROM help_categories WHERE id = ?', [category_id]);
+        if (!category.length) {
+            return res.status(400).json({ message: 'Invalid category ID' });
+        }
+        
+        const [result] = await db.query(
+            `INSERT INTO help_articles 
+            (category_id, title, content, \`order\`, is_published) 
+            VALUES (?, ?, ?, ?, ?)`,
+            [
+                category_id, 
+                title, 
+                content, 
+                order || 0, 
+                is_published === undefined ? true : is_published
+            ]
+        );
+        
+        const [newArticle] = await db.query(
+            `SELECT a.*, c.name as category_name 
+             FROM help_articles a
+             LEFT JOIN help_categories c ON a.category_id = c.id
+             WHERE a.id = ?`, 
+            [result.insertId]
+        );
+        
+        console.log('New article created:', newArticle[0]);
+        res.status(201).json(newArticle[0]);
+    } catch (error) {
+        console.error('Error creating help article:', error);
+        res.status(500).json({ message: 'Error creating help article' });
+    }
+});
+
+// Update an article (admin only)
+router.put('/articles/:id', authenticateToken, isAdmin, async (req, res) => {
+    console.log(`PUT /articles/${req.params.id} request received`);
+    try {
+        const { id } = req.params;
+        const { category_id, title, content, order, is_published } = req.body;
+        
+        if (!title || !content || !category_id) {
+            return res.status(400).json({ message: 'Title, content, and category ID are required' });
+        }
+        
+        // Verify category exists
+        const [category] = await db.query('SELECT * FROM help_categories WHERE id = ?', [category_id]);
+        if (!category.length) {
+            return res.status(400).json({ message: 'Invalid category ID' });
+        }
+        
+        await db.query(
+            `UPDATE help_articles 
+             SET category_id = ?, title = ?, content = ?, \`order\` = ?, is_published = ?
+             WHERE id = ?`,
+            [
+                category_id, 
+                title, 
+                content, 
+                order || 0, 
+                is_published === undefined ? true : is_published,
+                id
+            ]
+        );
+        
+        const [updatedArticle] = await db.query(
+            `SELECT a.*, c.name as category_name 
+             FROM help_articles a
+             LEFT JOIN help_categories c ON a.category_id = c.id
+             WHERE a.id = ?`, 
+            [id]
+        );
+        
+        if (!updatedArticle.length) {
+            return res.status(404).json({ message: 'Article not found' });
+        }
+        
+        console.log('Article updated:', updatedArticle[0]);
+        res.json(updatedArticle[0]);
+    } catch (error) {
+        console.error(`Error updating article ${req.params.id}:`, error);
+        res.status(500).json({ message: 'Error updating article' });
+    }
+});
+
+// Delete an article (admin only)
+router.delete('/articles/:id', authenticateToken, isAdmin, async (req, res) => {
+    console.log(`DELETE /articles/${req.params.id} request received`);
+    try {
+        const { id } = req.params;
+        
+        // Check if article exists
+        const [article] = await db.query('SELECT * FROM help_articles WHERE id = ?', [id]);
+        
+        if (!article.length) {
+            return res.status(404).json({ message: 'Article not found' });
+        }
+        
+        // Delete the article
+        await db.query('DELETE FROM help_articles WHERE id = ?', [id]);
+        
+        console.log('Article deleted:', id);
+        res.json({ message: 'Article deleted successfully' });
+    } catch (error) {
+        console.error(`Error deleting article ${req.params.id}:`, error);
+        res.status(500).json({ message: 'Error deleting article' });
+    }
+});
 
 module.exports = router; 

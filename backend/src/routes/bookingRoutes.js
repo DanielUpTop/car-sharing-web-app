@@ -3,6 +3,10 @@ const router = express.Router();
 const Booking = require('../models/bookingModel');
 const authenticateToken = require('../middleware/authenticateToken');
 const db = require('../config/dbConfig');
+const Membership = require('../models/membershipModel');
+const MembershipUtils = require('../utils/membershipUtils');
+const Cancellation = require('../models/cancellationModel');
+const { getUserMembership } = require('../utils/userUtils');
 
 // Create a new booking
 router.post('/', authenticateToken, async (req, res) => {
@@ -52,69 +56,109 @@ router.post('/', authenticateToken, async (req, res) => {
             await connection.rollback();
             return res.status(404).json({
                 message: 'Car not found',
-                error: 'Invalid car_id'
+                error: 'Invalid car ID'
             });
         }
 
-        if (car[0].availability_status !== 'available') {
+        // Check if user has the required membership level to book this car
+        const membership = await getUserMembership(user_id);
+        const userMembershipType = membership ? membership.type : 'none';
+        const requiredMembership = car[0].required_membership;
+
+        if (!canBookWithMembership(userMembershipType, requiredMembership)) {
             await connection.rollback();
-            return res.status(400).json({
-                message: 'Car has been booked by someone else',
-                error: 'Car is not available'
+            return res.status(403).json({
+                message: 'Membership level too low',
+                error: `This car requires a ${requiredMembership} membership or higher`,
+                required: requiredMembership,
+                userHas: userMembershipType
             });
         }
 
         // Check for overlapping bookings
-        const [overlappingBookings] = await connection.query(
-            `SELECT * FROM bookings 
+        const [existingBookings] = await connection.query(
+            `SELECT id FROM bookings 
              WHERE car_id = ? 
-             AND status != 'cancelled'
+             AND status NOT IN ('cancelled', 'completed') 
              AND ((start_date BETWEEN ? AND ?) 
              OR (end_date BETWEEN ? AND ?)
              OR (start_date <= ? AND end_date >= ?))`,
             [car_id, start_date, end_date, start_date, end_date, start_date, end_date]
         );
 
-        if (overlappingBookings.length > 0) {
+        if (existingBookings.length > 0) {
             await connection.rollback();
-            return res.status(400).json({
-                message: 'Car is not available for the selected time period',
-                error: 'Booking time conflict'
+            return res.status(409).json({
+                message: 'Car already booked for this period',
+                error: 'Booking conflict'
             });
         }
 
-        // Create the booking
-        const [result] = await connection.query(
-            `INSERT INTO bookings (user_id, car_id, start_date, end_date, total_price, status) 
-             VALUES (?, ?, ?, ?, ?, 'pending')`,
+        // Insert booking
+        const [bookingResult] = await connection.query(
+            `INSERT INTO bookings 
+             (user_id, car_id, start_date, end_date, total_price, status, payment_status) 
+             VALUES (?, ?, ?, ?, ?, 'pending', 'pending')`,
             [user_id, car_id, start_date, end_date, total_price]
         );
 
-        // Update car availability
+        const bookingId = bookingResult.insertId;
+
+        // Apply discounts if membership data was provided
+        if (req.body.membership_discount) {
+            const { membership_type, original_price, discount_percentage, discount_amount } = req.body.membership_discount;
+            
+            await connection.query(
+                `INSERT INTO booking_discounts 
+                 (booking_id, original_price, discounted_price, discount_percentage, membership_type) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [bookingId, original_price, total_price, discount_percentage, membership_type]
+            );
+        }
+
+        // If stripe payment intent ID is provided, update the booking
+        if (req.body.payment_intent_id) {
         await connection.query(
-            'UPDATE cars SET availability_status = ? WHERE id = ?',
-            ['booked', car_id]
+                `UPDATE bookings SET stripe_payment_intent_id = ?, payment_status = 'paid'
+                 WHERE id = ?`,
+                [req.body.payment_intent_id, bookingId]
         );
+        }
 
         await connection.commit();
-        console.log('Booking created successfully:', result.insertId);
 
         res.status(201).json({
             message: 'Booking created successfully',
-            bookingId: result.insertId
+            bookingId: bookingId
         });
-
     } catch (error) {
         await connection.rollback();
         console.error('Error creating booking:', error);
         res.status(500).json({
-            message: 'Error creating booking',
+            message: 'Internal server error',
             error: error.message
         });
     } finally {
         connection.release();
     }
 });
+
+// Helper function to check if user can book a car with their membership level
+function canBookWithMembership(userMembership, requiredMembership) {
+    // If no membership required, anyone can book
+    if (requiredMembership === 'none') return true;
+    
+    // Membership hierarchy
+    const membershipLevels = {
+        'none': 0,
+        'basic': 1,
+        'premium': 2,
+        'platinum': 3
+    };
+    
+    // User must have same or higher membership level
+    return membershipLevels[userMembership] >= membershipLevels[requiredMembership];
+}
 
 // Get user's bookings
 router.get('/user', authenticateToken, async (req, res) => {
@@ -144,31 +188,138 @@ router.patch('/:id/status', authenticateToken, async (req, res) => {
     }
 });
 
-// Add this route to handle cancellation
+// Update the cancellation route
 router.put('/:id/cancel', authenticateToken, async (req, res) => {
+    const connection = await db.getConnection();
+    
     try {
-        // Get the car_id from the booking
-        const [booking] = await db.query(
-            'SELECT car_id FROM bookings WHERE id = ?',
-            [req.params.id]
+        const bookingId = req.params.id;
+        const userId = req.user.id;
+        
+        // Start transaction
+        await connection.beginTransaction();
+        
+        // First check if the booking exists and belongs to the user
+        const [booking] = await connection.query(
+            'SELECT * FROM bookings WHERE id = ? AND user_id = ?',
+            [bookingId, userId]
         );
+        
+        if (booking.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({
+                message: 'Booking not found or does not belong to user',
+                success: false
+            });
+        }
+        
+        // Check if the booking is already cancelled
+        if (booking[0].status === 'cancelled') {
+            await connection.rollback();
+            return res.status(400).json({
+                message: 'Booking is already cancelled',
+                success: false
+            });
+        }
+        
+        // Check if user is eligible for free cancellation based on membership
+        const eligibility = await Cancellation.checkEligibility(userId);
+        const isFree = eligibility.eligible;
+        let membershipType = 'none';
+        
+        if (eligibility.membership) {
+            membershipType = eligibility.membership.type;
+        }
 
         // Update booking status
-        await db.query(
+        await connection.query(
             'UPDATE bookings SET status = ? WHERE id = ?',
-            ['cancelled', req.params.id]
+            ['cancelled', bookingId]
         );
 
         // Restore car availability
-        await db.query(
+        await connection.query(
             'UPDATE cars SET availability_status = ? WHERE id = ?',
             ['available', booking[0].car_id]
         );
 
-        res.json({ message: 'Booking cancelled successfully' });
+        // Record the cancellation
+        await Cancellation.recordCancellation(userId, bookingId, isFree, membershipType);
+        
+        // Process refund if eligible for free cancellation
+        let refundAmount = 0;
+        if (isFree) {
+            refundAmount = booking[0].total_price;
+            // Here you would add logic to process the actual refund through your payment system
+            
+            // Record the refund in the database
+            await connection.query(
+                `INSERT INTO refunds (booking_id, amount, reason, status) 
+                 VALUES (?, ?, ?, ?)`,
+                [bookingId, refundAmount, 'Free membership cancellation', 'completed']
+            );
+        }
+        
+        // Commit transaction
+        await connection.commit();
+        
+        // Return the result with cancellation info
+        res.json({
+            message: 'Booking cancelled successfully',
+            success: true,
+            isFree,
+            remainingCancellations: eligibility.remainingCancellations,
+            refundAmount: refundAmount,
+            membership: membershipType
+        });
+        
     } catch (error) {
+        await connection.rollback();
         console.error('Error cancelling booking:', error);
-        res.status(500).json({ message: 'Error cancelling booking' });
+        res.status(500).json({ 
+            message: 'Error cancelling booking',
+            success: false,
+            error: error.message
+        });
+    } finally {
+        connection.release();
+    }
+});
+
+// Add a route to get user's remaining cancellations
+router.get('/cancellations/remaining', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const eligibility = await Cancellation.checkEligibility(userId);
+        
+        res.json({
+            remainingCancellations: eligibility.remainingCancellations,
+            eligible: eligibility.eligible,
+            reason: eligibility.reason,
+            membership: eligibility.membership ? eligibility.membership.type : 'none'
+        });
+    } catch (error) {
+        console.error('Error checking cancellation eligibility:', error);
+        res.status(500).json({ 
+            message: 'Error checking cancellation eligibility',
+            error: error.message
+        });
+    }
+});
+
+// Add a route to get user's cancellation history
+router.get('/cancellations/history', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const cancellations = await Cancellation.getUserCancellations(userId);
+        
+        res.json(cancellations);
+    } catch (error) {
+        console.error('Error fetching cancellation history:', error);
+        res.status(500).json({ 
+            message: 'Error fetching cancellation history',
+            error: error.message
+        });
     }
 });
 

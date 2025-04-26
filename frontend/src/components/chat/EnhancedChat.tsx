@@ -113,7 +113,9 @@ const EnhancedChat: React.FC = () => {
                 ws.current.close();
             }
             
-            const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/chat';
+            // Important: Change the WebSocket URL to match exactly what the backend expects
+            // The backend is using '/ws/chat' path
+            const wsUrl = 'ws://localhost:5001/ws/chat';
             ws.current = new WebSocket(wsUrl);
             
             ws.current.onopen = () => {
@@ -757,7 +759,27 @@ const EnhancedChat: React.FC = () => {
     if (loading) {
         return (
             <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 100px)' }}>
-                <CircularProgress />
+                <Box sx={{ textAlign: 'center' }}>
+                    <CircularProgress sx={{ mb: 3 }} />
+                    <Typography variant="h6" gutterBottom>Loading chat...</Typography>
+                    <Button 
+                        variant="contained" 
+                        color="primary" 
+                        onClick={() => {
+                            // Force attempt to create a new conversation even while loading
+                            createNewConversation().then(() => {
+                                setLoading(false);
+                            }).catch(err => {
+                                console.error("Error creating conversation:", err);
+                                setError("Could not connect to chat service. Please try again later.");
+                                setLoading(false);
+                            });
+                        }}
+                        sx={{ mt: 2 }}
+                    >
+                        Start New Conversation
+                    </Button>
+                </Box>
             </Container>
         );
     }
@@ -1133,6 +1155,18 @@ const EnhancedChat: React.FC = () => {
                                                     mb: 2
                                                 }}
                                             >
+                                                {/* Sender name above message */}
+                                                <Typography 
+                                                    variant="subtitle2" 
+                                                    sx={{ 
+                                                        mb: 0.5,
+                                                        fontWeight: 'bold',
+                                                        color: message.sender_id === user?.id ? '#689f38' : '#1976d2',
+                                                    }}
+                                                >
+                                                    {message.sender_id === user?.id ? 'You' : 'Support Team'}
+                                                </Typography>
+                                                
                                                 <Paper 
                                                     elevation={1}
                                                     sx={{
@@ -1147,7 +1181,7 @@ const EnhancedChat: React.FC = () => {
                                                 <Typography 
                                                     variant="caption" 
                                                     color="text.secondary" 
-                                                    sx={{ mt: 0.5 }}
+                                                    sx={{ mt: 0.5, fontSize: '0.7rem' }}
                                                 >
                                                     {message.created_at ? new Date(message.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                                                 </Typography>
