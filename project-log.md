@@ -606,6 +606,19 @@ Improved WebSocket handling in chatHandler.js
 Enhanced error handling and logging throughout the application
 Updated SQL schema for better data relationships
 
+### 26th April, 2024
+#### Insurance Claim Submission Bug Fixes
+- Fixed critical bug in insurance claim submission functionality causing "Policy ID is required" errors
+- Modified the claim submission process to use JSON data format instead of FormData in API requests
+- Restructured how policy ID is captured and transmitted to the backend:
+  - Updated hidden input field handling for policy data
+  - Ensured proper numeric formatting of policy ID values
+  - Added proper validation checks before form submission
+- Added disable condition to claim submission button when no policy is selected
+- Enhanced error handling in claim submission process
+- Improved user experience by providing clearer feedback during the claim submission process
+- Maintained support for document uploads while fixing the core claim data submission
+- The changes ensure insurance claims now process correctly through the backend API
 
 ## Technical Architecture Overview
 The Car Sharing Web Application follows a modern full-stack architecture:

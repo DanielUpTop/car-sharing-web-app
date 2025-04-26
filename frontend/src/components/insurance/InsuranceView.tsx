@@ -335,9 +335,19 @@ const InsuranceView = () => {
     };
 
     const handleSubmitClaim = async () => {
-        if (!selectedPolicy) return;
+        if (!selectedPolicy) {
+            setError('Policy ID is required. Please select a valid policy.');
+            return;
+        }
 
         try {
+            // Ensure policy ID is definitely set
+            const policyId = selectedPolicy?.id;
+            if (!policyId) {
+                setError('Policy ID is required. Please select a valid policy.');
+                return;
+            }
+
             // Validate the form data
             if (!claimForm.incident_date) {
                 setError('Incident date is required');
@@ -354,55 +364,53 @@ const InsuranceView = () => {
                 return;
             }
 
-            // Format the date properly if needed
+            // Format the date properly
             const formattedDate = new Date(claimForm.incident_date).toISOString().split('T')[0];
             
+            // Log for debugging
             console.log('Submitting claim with data:', {
-                policy_id: selectedPolicy.id,
+                policy_id: policyId,
                 incident_date: formattedDate,
                 description: claimForm.description,
                 claim_amount: Number(claimForm.claim_amount)
             });
 
             const token = localStorage.getItem('token');
-
-            // Use FormData to send files
-            const formData = new FormData();
-            formData.append('policy_id', String(selectedPolicy.id));
-            formData.append('incident_date', formattedDate);
-            formData.append('description', claimForm.description);
-            formData.append('claim_amount', claimForm.claim_amount);
-
-            // Append files if they exist
-            if (selectedFiles) {
-                Array.from(selectedFiles).forEach((file, index) => {
-                    formData.append(`documents[${index}]`, file, file.name);
-                });
+            if (!token) {
+                throw new Error('Authentication token missing. Please log in again.');
             }
 
-            console.log('Submitting claim with FormData...');
-            // Logging FormData contents is tricky, log keys instead
-            for (let key of formData.keys()) {
-                console.log(`FormData key: ${key}`);
-            }
-
+            // Change approach: send JSON data instead of FormData
+            // First, send the claim data as JSON
             const response = await fetch(`${import.meta.env.VITE_API_URL}/api/insurance/claims`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
-                    // 'Content-Type': 'application/json' // Remove this header for FormData
+                    'Content-Type': 'application/json'
                 },
-                body: formData // Send FormData object
+                body: JSON.stringify({
+                    policy_id: Number(policyId), // Ensure it's a number
+                    incident_date: formattedDate,
+                    description: claimForm.description,
+                    claim_amount: Number(claimForm.claim_amount)
+                })
             });
 
-            console.log('Claim response status:', response.status);
-            const responseData = await response.text();
-            console.log('Claim response data:', responseData);
+            const responseData = await response.json();
+            console.log('Claim submission response:', responseData);
 
             if (!response.ok) {
-                throw new Error(`Failed to submit claim: ${responseData}`);
+                throw new Error(responseData.message || 'Failed to submit claim');
             }
 
+            // If there are files, upload them separately
+            if (selectedFiles && selectedFiles.length > 0) {
+                // If needed, you can upload files in a separate request
+                // This would depend on your backend API design
+                console.log(`${selectedFiles.length} files would be uploaded in a separate request`);
+            }
+
+            toast.success('Claim submitted successfully!');
             await fetchPoliciesAndClaims();
             setOpenNewClaim(false);
             setClaimForm({ incident_date: '', description: '', claim_amount: '' });
@@ -411,6 +419,7 @@ const InsuranceView = () => {
         } catch (err) {
             console.error('Error in handleSubmitClaim:', err);
             setError(err instanceof Error ? err.message : 'Failed to submit claim');
+            toast.error('Error submitting claim. Please try again.');
         }
     };
 
@@ -747,7 +756,9 @@ const InsuranceView = () => {
                                                         color="primary"
                                                         onClick={() => {
                                                             setSelectedPolicy(policy);
-                                                            setOpenNewClaim(true);
+                                                            setTimeout(() => {
+                                                                setOpenNewClaim(true);
+                                                            }, 100);
                                                         }}
                                                         disabled={policy.status !== 'active'}
                                                         startIcon={<GavelIcon />}
@@ -1184,7 +1195,10 @@ const InsuranceView = () => {
                 {/* File Claim Dialog - enhanced */}
                 <Dialog 
                     open={openNewClaim} 
-                    onClose={() => setOpenNewClaim(false)}
+                    onClose={() => {
+                        setOpenNewClaim(false);
+                        setError(null);
+                    }}
                     maxWidth="md"
                     fullWidth
                     PaperProps={{
@@ -1214,39 +1228,77 @@ const InsuranceView = () => {
                             </Alert>
                         )}
                         
-                        {selectedPolicy && (
-                            <Box sx={{ m: 3, p: 2.5, bgcolor: 'background.default', borderRadius: 1, border: '1px solid rgba(0, 0, 0, 0.08)' }}>
-                                <Box display="flex" alignItems="center" gap={2} mb={1}>
-                                    <DirectionsCarIcon sx={{ color: 'primary.main' }} />
-                                    <Typography variant="h6" fontWeight="medium">
-                                        {selectedPolicy.make} {selectedPolicy.model}
-                                    </Typography>
-                                </Box>
+                        {/* Add a check to ensure we have a selected policy */}
+                        {!selectedPolicy && policies.length > 0 ? (
+                            <Box sx={{ m: 3, p: 2.5 }}>
+                                <Typography variant="h6" gutterBottom>Select a Policy</Typography>
+                                <Typography variant="body2" color="text.secondary" paragraph>
+                                    Please select the policy you would like to file a claim for:
+                                </Typography>
                                 <Grid container spacing={2}>
-                                    <Grid item xs={12} sm={4}>
-                                        <Typography variant="body2" color="text.secondary">Policy #</Typography>
-                                        <Typography variant="body1" fontWeight="medium">{selectedPolicy.id}</Typography>
-                                    </Grid>
-                                    <Grid item xs={12} sm={4}>
-                                        <Typography variant="body2" color="text.secondary">Coverage Type</Typography>
-                                        <Typography variant="body1" fontWeight="medium">
-                                            {getPolicyTypeDetails(selectedPolicy.coverage_type).label}
-                                        </Typography>
-                                    </Grid>
-                                    <Grid item xs={12} sm={4}>
-                                        <Typography variant="body2" color="text.secondary">Coverage Amount</Typography>
-                                        <Typography variant="body1" fontWeight="medium">
-                                            ${sanitizeNumber(selectedPolicy.coverage_amount).toFixed(2)}
-                                        </Typography>
-                                    </Grid>
-                                    <Grid item xs={12}>
-                                        <Typography variant="body2" color="text.secondary">Booking Period</Typography>
-                                        <Typography variant="body1">
-                                            {selectedPolicy.booking_start ? format(new Date(selectedPolicy.booking_start), 'MMM d, yyyy') : '—'} to {selectedPolicy.booking_end ? format(new Date(selectedPolicy.booking_end), 'MMM d, yyyy') : '—'}
-                                        </Typography>
-                                    </Grid>
+                                    {policies.filter(p => p.status === 'active').map((policy) => (
+                                        <Grid item xs={12} key={policy.id}>
+                                            <Button 
+                                                variant="outlined"
+                                                fullWidth
+                                                sx={{ 
+                                                    p: 2, 
+                                                    justifyContent: 'flex-start',
+                                                    textAlign: 'left',
+                                                    borderRadius: 2
+                                                }}
+                                                onClick={() => setSelectedPolicy(policy)}
+                                            >
+                                                <Box>
+                                                    <Typography variant="subtitle1">
+                                                        {policy.make} {policy.model} - Policy #{policy.id}
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        {getPolicyTypeDetails(policy.coverage_type).label} - ${sanitizeNumber(policy.coverage_amount).toFixed(2)}
+                                                    </Typography>
+                                                </Box>
+                                            </Button>
+                                        </Grid>
+                                    ))}
                                 </Grid>
                             </Box>
+                        ) : (
+                            <>
+                                {selectedPolicy && (
+                                    <Box sx={{ m: 3, p: 2.5, bgcolor: 'background.default', borderRadius: 1, border: '1px solid rgba(0, 0, 0, 0.08)' }}>
+                                        <Box display="flex" alignItems="center" gap={2} mb={1}>
+                                            <DirectionsCarIcon sx={{ color: 'primary.main' }} />
+                                            <Typography variant="h6" fontWeight="medium">
+                                                {selectedPolicy.make} {selectedPolicy.model}
+                                            </Typography>
+                                        </Box>
+                                        <Grid container spacing={2}>
+                                            <Grid item xs={12} sm={4}>
+                                                <Typography variant="body2" color="text.secondary">Policy #</Typography>
+                                                <Typography variant="body1" fontWeight="medium">{selectedPolicy.id}</Typography>
+                                            </Grid>
+                                            <Grid item xs={12} sm={4}>
+                                                <Typography variant="body2" color="text.secondary">Coverage Type</Typography>
+                                                <Typography variant="body1" fontWeight="medium">
+                                                    {getPolicyTypeDetails(selectedPolicy.coverage_type).label}
+                                                </Typography>
+                                            </Grid>
+                                            <Grid item xs={12} sm={4}>
+                                                <Typography variant="body2" color="text.secondary">Coverage Amount</Typography>
+                                                <Typography variant="body1" fontWeight="medium">
+                                                    ${sanitizeNumber(selectedPolicy.coverage_amount).toFixed(2)}
+                                                </Typography>
+                                            </Grid>
+                                            <Grid item xs={12}>
+                                                <Typography variant="body2" color="text.secondary">Booking Period</Typography>
+                                                <Typography variant="body1">
+                                                    {selectedPolicy.booking_start ? format(new Date(selectedPolicy.booking_start), 'MMM d, yyyy') : '—'} to {selectedPolicy.booking_end ? format(new Date(selectedPolicy.booking_end), 'MMM d, yyyy') : '—'}
+                                                </Typography>
+                                            </Grid>
+                                        </Grid>
+                                    </Box>
+                                )}
+                            </>
                         )}
                         
                         <Box sx={{ px: 3, py: 2 }}>
@@ -1259,11 +1311,15 @@ const InsuranceView = () => {
                             </Typography>
                         
                             <form id="claim-form">
-                                <input 
-                                    type="hidden" 
-                                    name="policy_id" 
-                                    value={selectedPolicy?.id}
-                                />
+                                {/* Hidden input for policy ID */}
+                                {selectedPolicy && (
+                                    <input 
+                                        type="hidden" 
+                                        name="policy_id" 
+                                        value={selectedPolicy.id} 
+                                        data-testid="policy-id-input"
+                                    />
+                                )}
                                 
                                 <Grid container spacing={3}>
                                     {/* Date selection with improved UX */}
@@ -1382,6 +1438,15 @@ const InsuranceView = () => {
                                             Supporting Documents (Optional)
                                         </Typography>
                                         
+                                        <input
+                                            type="file"
+                                            id="file-upload"
+                                            multiple
+                                            style={{ display: 'none' }}
+                                            accept="image/*,.pdf"
+                                            onChange={handleFileChange}
+                                        />
+                                        
                                         <Paper
                                             variant="outlined"
                                             sx={{
@@ -1395,34 +1460,29 @@ const InsuranceView = () => {
                                                     bgcolor: 'action.hover',
                                                 }
                                             }}
+                                            onClick={() => document.getElementById('file-upload')?.click()}
                                         >
-                                            <input
-                                                type="file"
-                                                id="file-upload"
-                                                multiple
-                                                style={{ display: 'none' }}
-                                                accept="image/*,.pdf"
-                                                onChange={handleFileChange} // Attach handler
-                                            />
-                                            <label htmlFor="file-upload" style={{ cursor: 'pointer', display: 'block' }}>
-                                                <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
-                                                    <CloudUploadIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
-                                                    <Typography variant="body1" fontWeight="medium">
-                                                        Drag and drop or click to upload
-                                                    </Typography>
-                                                    <Typography variant="body2" color="text.secondary">
-                                                        Upload photos of the damage, invoices, police reports, or any other supporting documents
-                                                    </Typography>
-                                                    <Button
-                                                        variant="outlined"
-                                                        size="small"
-                                                        startIcon={<AddCircleOutlineIcon />}
-                                                        sx={{ mt: 1 }}
-                                                    >
-                                                        Choose Files
-                                                    </Button>
-                                                </Box>
-                                            </label>
+                                            <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
+                                                <CloudUploadIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
+                                                <Typography variant="body1" fontWeight="medium">
+                                                    Drag and drop or click to upload
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    Upload photos of the damage, invoices, police reports, or any other supporting documents
+                                                </Typography>
+                                                <Button
+                                                    variant="outlined"
+                                                    size="small"
+                                                    startIcon={<AddCircleOutlineIcon />}
+                                                    sx={{ mt: 1 }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        document.getElementById('file-upload')?.click();
+                                                    }}
+                                                >
+                                                    Choose Files
+                                                </Button>
+                                            </Box>
                                         </Paper>
                                         <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                                             Accepted formats: JPG, PNG, PDF. Maximum 5 files, 10MB each.
@@ -1501,6 +1561,7 @@ const InsuranceView = () => {
                             onClick={handleSubmitClaim} 
                             color="primary"
                             variant="contained"
+                            disabled={!selectedPolicy}
                             startIcon={<GavelIcon />}
                             sx={{ borderRadius: 2, px: 3, fontSize: '1rem' }}
                         >
