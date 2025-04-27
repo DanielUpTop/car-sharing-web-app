@@ -972,9 +972,41 @@ const InsuranceView = () => {
                                                             }
                                                         }}>
                                                             {['pending', 'processing', 'approved', 'paid'].map((status, index) => {
-                                                                const isActive = ['approved', 'paid'].includes(claim.status) || 
-                                                                                claim.status === status ||
-                                                                                (claim.status === 'processing' && status === 'pending');
+                                                                // Determine if the circle should be active based on claim status
+                                                                let isActive = false;
+                                                                let circleColor = 'divider'; // Default gray
+                                                                
+                                                                if (claim.status === 'rejected') {
+                                                                    // For rejected claims, show the progress up to and including 'approved' in red
+                                                                    if (status === 'pending' || status === 'processing' || status === 'approved') {
+                                                                        isActive = true;
+                                                                        circleColor = 'error.main'; // Red color
+                                                                    }
+                                                                } else if (claim.status === 'pending') {
+                                                                    // For pending claims, only the 'pending' circle should be active in orange
+                                                                    if (status === 'pending') {
+                                                                        isActive = true;
+                                                                        circleColor = 'warning.main'; // Orange color
+                                                                    }
+                                                                } else if (claim.status === 'processing') {
+                                                                    // For processing claims, 'pending' and 'processing' circles should be active in orange
+                                                                    if (status === 'pending' || status === 'processing') {
+                                                                        isActive = true;
+                                                                        circleColor = 'warning.main'; // Orange color
+                                                                    }
+                                                                } else if (claim.status === 'approved') {
+                                                                    // For approved claims, only circles up to and including "approved" should be green
+                                                                    if (status === 'pending' || status === 'processing' || status === 'approved') {
+                                                                        isActive = true;
+                                                                        circleColor = 'success.main'; // Green color
+                                                                    }
+                                                                } else if (claim.status === 'paid') {
+                                                                    // For paid claims, all circles should be active in green
+                                                                    isActive = true;
+                                                                    circleColor = 'success.main'; // Green color
+                                                                }
+                                                                
+                                                                // Determine if this is the current status to highlight it
                                                                 const isCurrent = claim.status === status;
                                                                 
                                                                 return (
@@ -990,9 +1022,9 @@ const InsuranceView = () => {
                                                                                 width: 16, 
                                                                                 height: 16, 
                                                                                 borderRadius: '50%',
-                                                                                bgcolor: isActive ? 'success.main' : 'divider',
+                                                                                bgcolor: isActive ? circleColor : 'divider',
                                                                                 border: isCurrent ? '2px solid' : 'none',
-                                                                                borderColor: 'success.main',
+                                                                                borderColor: isCurrent ? circleColor : 'transparent',
                                                                                 zIndex: 2
                                                                             }}
                                                                         />
