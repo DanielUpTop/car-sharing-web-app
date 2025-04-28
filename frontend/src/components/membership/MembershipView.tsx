@@ -194,7 +194,7 @@ const MembershipView = () => {
         setError(null);
         
         try {
-            if (selectedType === null) {
+            if (membership && selectedType === null) {
                 // This means the user wants to cancel their membership
                 console.log("Cancelling membership...");
                 
@@ -233,6 +233,65 @@ const MembershipView = () => {
                 setSnackbarMessage(message);
                 setSnackbarOpen(true);
                 console.log('Snackbar should be visible now');
+                
+                // Close dialog and refresh membership data
+                setShowUpgradeDialog(false);
+                await fetchMembership();
+            } else if (selectedType) {
+                // User is purchasing a new membership
+                console.log(`Purchasing ${selectedType} membership...`);
+                
+                // Get token
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    throw new Error('Authentication token not found. Please log in again.');
+                }
+                
+                // Extract user information from localStorage if available
+                let userId;
+                const userStr = localStorage.getItem('user');
+                if (userStr) {
+                    try {
+                        const userData = JSON.parse(userStr);
+                        userId = userData.id;
+                    } catch (e) {
+                        console.error('Error parsing user data from localStorage', e);
+                    }
+                }
+                
+                if (!userId) {
+                    throw new Error('User ID not found. Please log in again.');
+                }
+                
+                // Make the request to purchase the membership
+                const url = `${import.meta.env.VITE_API_URL}/api/memberships`;
+                console.log(`Making membership purchase request to: ${url}`);
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        userId: userId,
+                        membershipType: selectedType,
+                        auto_renew: true
+                    })
+                });
+                
+                console.log('Purchase response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Purchase error response:', errorText);
+                    throw new Error(errorText || 'Failed to purchase membership');
+                }
+                
+                // Set success message
+                const message = `You have successfully purchased a ${selectedType} membership!`;
+                setSnackbarMessage(message);
+                setSnackbarOpen(true);
                 
                 // Close dialog and refresh membership data
                 setShowUpgradeDialog(false);
@@ -574,19 +633,35 @@ const MembershipView = () => {
 
                 <Dialog open={showUpgradeDialog} onClose={() => setShowUpgradeDialog(false)}>
                     <DialogTitle>
-                        Cancel Membership
+                        {membership ? 'Cancel Membership' : `Select ${selectedType ? (selectedType.charAt(0).toUpperCase() + selectedType.slice(1)) : ''} Membership`}
                     </DialogTitle>
                     
                     <DialogContent>
-                        <>
-                            <Typography variant="body1" paragraph>
-                                Are you sure you want to cancel your {membership?.type} membership?
-                                    </Typography>
-                            
-                            <Typography variant="body1" paragraph>
-                                You will still have access to membership benefits until the end of your current period, but your membership will not renew.
-                            </Typography>
-                        </>
+                        {membership ? (
+                            <>
+                                <Typography variant="body1" paragraph>
+                                    Are you sure you want to cancel your {membership?.type} membership?
+                                </Typography>
+                                
+                                <Typography variant="body1" paragraph>
+                                    You will still have access to membership benefits until the end of your current period, but your membership will not renew.
+                                </Typography>
+                            </>
+                        ) : (
+                            <>
+                                <Typography variant="body1" paragraph>
+                                    You're about to purchase a {selectedType} membership. 
+                                </Typography>
+                                
+                                <Typography variant="body1" paragraph>
+                                    Your membership will begin immediately upon payment and will renew monthly.
+                                </Typography>
+                                
+                                <Typography variant="h6" color="primary" paragraph sx={{ fontWeight: 'bold', mt: 2 }}>
+                                    Price: £{selectedType ? getMembershipPrice(selectedType).toFixed(2) : '0.00'}/month
+                                </Typography>
+                            </>
+                        )}
                     </DialogContent>
                     
                     <DialogActions>
@@ -596,9 +671,9 @@ const MembershipView = () => {
                         <Button 
                             onClick={handleUpgrade} 
                             variant="contained" 
-                            color="error"
+                            color={membership ? "error" : "primary"}
                         >
-                            Cancel Membership
+                            {membership ? 'Cancel Membership' : 'Purchase Membership'}
                         </Button>
                     </DialogActions>
                 </Dialog>

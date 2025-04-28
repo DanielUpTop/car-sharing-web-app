@@ -30,7 +30,15 @@ class Car {
              AND table_name = 'cars' 
              AND column_name = 'address'`,
             // Add address column if it doesn't exist (this will be conditionally executed)
-            `ALTER TABLE cars ADD COLUMN address VARCHAR(255) AFTER location`
+            `ALTER TABLE cars ADD COLUMN address VARCHAR(255) AFTER location`,
+            // Check if required_membership column exists
+            `SELECT COUNT(*) as count
+             FROM information_schema.columns 
+             WHERE table_schema = DATABASE()
+             AND table_name = 'cars' 
+             AND column_name = 'required_membership'`,
+            // Add required_membership column if it doesn't exist
+            `ALTER TABLE cars ADD COLUMN required_membership ENUM('none', 'basic', 'premium', 'platinum') DEFAULT 'basic' AFTER price_per_hour`
         ];
         
         try {
@@ -48,6 +56,31 @@ class Car {
                 console.log('Address column added to cars table');
             } else {
                 console.log('Address column already exists');
+            }
+            
+            // Check if required_membership column exists
+            const [membershipRows] = await db.query(queries[3]);
+            const membershipColumnExists = membershipRows[0].count > 0;
+            
+            // Add required_membership column if it doesn't exist
+            if (!membershipColumnExists) {
+                await db.query(queries[4]);
+                console.log('Required membership column added to cars table with default value of "basic"');
+                
+                // Update existing luxury cars to have premium/platinum requirements
+                await db.query(`
+                    UPDATE cars 
+                    SET required_membership = 'premium' 
+                    WHERE daily_rate > 250 AND daily_rate <= 500
+                `);
+                await db.query(`
+                    UPDATE cars 
+                    SET required_membership = 'platinum' 
+                    WHERE daily_rate > 500
+                `);
+                console.log('Updated luxury cars with appropriate membership requirements');
+            } else {
+                console.log('Required membership column already exists');
             }
 
             console.log('Cars table setup completed successfully');

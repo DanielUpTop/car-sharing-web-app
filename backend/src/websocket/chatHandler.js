@@ -11,18 +11,54 @@ const initChatTables = async () => {
                 user_id INT NOT NULL,
                 subject VARCHAR(255) DEFAULT NULL,
                 status ENUM('open', 'closed') DEFAULT 'open',
+                rating INT NULL,
+                rated_at TIMESTAMP NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX (user_id)
             )
         `);
 
+        // **** START: Check and add rating column if missing ****
+        await db.query(`
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_schema = DATABASE()
+                AND table_name = 'conversations'
+                AND column_name = 'rating'
+            ) as column_exists
+        `).then(async ([result]) => {
+            if (result[0].column_exists === 0) { 
+                console.log('Adding missing rating column to conversations table...');
+                await db.query('ALTER TABLE conversations ADD COLUMN rating INT NULL');
+                console.log('conversations.rating column added.');
+            }
+        });
+        // **** END: Check and add rating column ****
+
+        // **** START: Check and add rated_at column if missing ****
+        await db.query(`
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_schema = DATABASE()
+                AND table_name = 'conversations'
+                AND column_name = 'rated_at'
+            ) as column_exists
+        `).then(async ([result]) => {
+            if (result[0].column_exists === 0) { 
+                console.log('Adding missing rated_at column to conversations table...');
+                await db.query('ALTER TABLE conversations ADD COLUMN rated_at TIMESTAMP NULL');
+                console.log('conversations.rated_at column added.');
+            }
+        });
+        // **** END: Check and add rated_at column ****
+
         // Create messages table if it doesn't exist
         await db.query(`
             CREATE TABLE IF NOT EXISTS messages (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 conversation_id INT NULL,
-                sender_id INT NOT NULL,
+                sender_id INT NULL,
                 content TEXT NOT NULL,
                 is_admin BOOLEAN DEFAULT FALSE,
                 is_read BOOLEAN DEFAULT FALSE,
@@ -32,6 +68,43 @@ const initChatTables = async () => {
                 INDEX (sender_id)
             )
         `);
+
+        // **** START: Check and ALTER sender_id column if it's NOT NULL ****
+        await db.query(`
+            SELECT IS_NULLABLE 
+            FROM information_schema.columns 
+            WHERE table_schema = DATABASE()
+            AND table_name = 'messages'
+            AND column_name = 'sender_id'
+        `).then(async ([results]) => {
+            if (results.length > 0 && results[0].IS_NULLABLE === 'NO') {
+                console.log('Altering messages table to allow NULL for sender_id...');
+                await db.query('ALTER TABLE messages MODIFY COLUMN sender_id INT NULL');
+                console.log('messages.sender_id column altered successfully.');
+            } else if (results.length > 0 && results[0].IS_NULLABLE === 'YES') {
+                console.log('messages.sender_id already allows NULL.');
+            } else {
+                 console.warn('Could not verify nullability of messages.sender_id column.');
+            }
+        });
+        // **** END: Check and ALTER sender_id column ****
+
+        // **** START: Check and add is_admin column if missing ****
+        await db.query(`
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_schema = DATABASE()
+                AND table_name = 'messages'
+                AND column_name = 'is_admin'
+            ) as column_exists
+        `).then(async ([result]) => {
+            if (result[0].column_exists === 0) { // Check if column_exists is 0 (false)
+                console.log('Adding missing is_admin column to messages table...');
+                await db.query('ALTER TABLE messages ADD COLUMN is_admin BOOLEAN DEFAULT FALSE');
+                console.log('is_admin column added.');
+            }
+        });
+        // **** END: Check and add is_admin column ****
 
         // Check for existing messages without conversation_id and fix them
         await db.query(`
@@ -171,44 +244,66 @@ const setupWebSocket = (chatWss, adminWss) => {
                             [conversationId, userId, data.message.content]
                         );
 
-                        console.log('Message saved with ID:', result.insertId);
+                        console.log('User message saved with ID:', result.insertId);
 
-                        // Get message details
-                        const [messages] = await db.query(
+                        // **** START: Add System Message ****
+                        const systemMessageContent = "The admin team will get back to you as soon as possible";
+                        const systemSenderId = null; // Use NULL for system messages
+                        const [systemResult] = await db.query(
+                            // Ensure query allows NULL for sender_id and includes is_system
+                            'INSERT INTO messages (conversation_id, sender_id, content, created_at, is_system) VALUES (?, ?, ?, NOW(), TRUE)',
+                            [conversationId, systemSenderId, systemMessageContent]
+                        );
+                        console.log('System message saved with ID:', systemResult.insertId);
+                        // **** END: Add System Message ****
+
+                        // Get user message details (to send back to sender/admins)
+                        const [userMessages] = await db.query(
                             `SELECT m.*, 
                                     CONCAT(u.first_name, ' ', u.last_name) as sender_name
                              FROM messages m
                              JOIN users u ON m.sender_id = u.id
-                             WHERE m.id = ?`,
-                            [result.insertId]
+                             WHERE m.id = ?`, // Query only for the user message ID
+                            [result.insertId] // Use the user message insert ID
                         );
 
-                        const messageToSend = {
-                            id: messages[0].id,
-                            content: messages[0].content,
-                            senderId: messages[0].sender_id,
-                            senderName: messages[0].sender_name,
-                            timestamp: messages[0].created_at,
-                            isAdmin: false
+                        // Ensure we found the user message
+                        if (userMessages.length === 0) {
+                            console.error('Failed to retrieve the saved user message.');
+                            // Potentially send an error back to the user
+                            return;
+                        }
+
+                        const userMessageToSend = {
+                            id: userMessages[0].id,
+                            content: userMessages[0].content,
+                            senderId: userMessages[0].sender_id,
+                            senderName: userMessages[0].sender_name,
+                            timestamp: userMessages[0].created_at,
+                            isAdmin: false // User message is never admin
                         };
 
-                        console.log('Sending message to client:', messageToSend);
+                        console.log('Sending user message confirmation to client:', userMessageToSend);
 
-                        // Send to all admin clients
+                        // Send ONLY the user message to all admin clients
                         adminClients.forEach(adminWs => {
                             if (adminWs.readyState === 1) {
                                 adminWs.send(JSON.stringify({
                                     type: 'message',
-                                    message: messageToSend
+                                    message: userMessageToSend
                                 }));
                             }
                         });
 
-                        // Send confirmation back to sender
+                        // Send ONLY the user message confirmation back to sender
                         ws.send(JSON.stringify({
-                            type: 'message',
-                            message: messageToSend
+                            type: 'message', // Or potentially 'message_sent_confirmation'
+                            message: userMessageToSend
                         }));
+
+                        // We DO NOT send the system message via WebSocket here
+                        // It will be picked up by the frontend via fetchMessages
+
                     } catch (error) {
                         console.error('Error handling message:', error);
                         ws.send(JSON.stringify({

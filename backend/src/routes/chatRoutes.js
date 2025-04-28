@@ -92,7 +92,7 @@ router.get('/conversations/:conversationId/messages', authenticateToken, async (
         const [messages] = await db.query(`
             SELECT m.*, u.first_name, u.last_name, u.role
             FROM messages m
-            JOIN users u ON m.sender_id = u.id
+            LEFT JOIN users u ON m.sender_id = u.id
             WHERE m.conversation_id = ?
             ORDER BY m.created_at ASC
         `, [conversationId]);
@@ -447,10 +447,10 @@ router.post('/conversations/:conversationId/rating', authenticateToken, async (r
             [rating, conversationId]
         );
         
-        // Add a message about the rating
+        // Add a message about the rating (as system message with NULL sender)
         await db.query(
-            'INSERT INTO messages (conversation_id, sender_id, content, is_system) VALUES (?, ?, ?, ?)',
-            [conversationId, req.user.id, `User rated this conversation: ${rating}/10 stars`, true]
+            'INSERT INTO messages (conversation_id, sender_id, content, is_system) VALUES (?, NULL, ?, TRUE)',
+            [conversationId, `User rated this conversation: ${rating}/10 stars`]
         );
 
         res.json({ success: true, message: "Rating submitted successfully" });

@@ -146,7 +146,7 @@ router.post('/', authenticateToken, async (req, res) => {
 // Helper function to check if user can book a car with their membership level
 function canBookWithMembership(userMembership, requiredMembership) {
     // If no membership required, anyone can book
-    if (requiredMembership === 'none') return true;
+    if (!requiredMembership || requiredMembership === 'none') return true;
     
     // Membership hierarchy
     const membershipLevels = {
@@ -156,8 +156,12 @@ function canBookWithMembership(userMembership, requiredMembership) {
         'platinum': 3
     };
     
+    // For non-members, treat them as having 'basic' access only
+    const userLevel = userMembership === 'none' ? membershipLevels['basic'] : membershipLevels[userMembership];
+    const requiredLevel = membershipLevels[requiredMembership] || membershipLevels['basic'];
+    
     // User must have same or higher membership level
-    return membershipLevels[userMembership] >= membershipLevels[requiredMembership];
+    return userLevel >= requiredLevel;
 }
 
 // Get user's bookings

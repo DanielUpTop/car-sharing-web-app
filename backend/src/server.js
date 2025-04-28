@@ -22,10 +22,12 @@ const userRoutes = require('./routes/userRoutes');
 const helpRoutes = require('./routes/helpRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const adminInsuranceRoutes = require('./routes/adminInsuranceRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const adminChatRoutes = require('./routes/adminChatRoutes');
 const supportTicketsRoutes = require('./routes/supportTicketsRoutes');
 const membershipRoutes = require('./routes/membershipRoutes');
+const geocodeRoutes = require('./routes/geocodeRoutes');
 const setupWebSocket = require('./websocket/chatHandler');
 
 const app = express();
@@ -114,7 +116,8 @@ app.use(helmet({
                 "https://js.stripe.com",
                 "https://m.stripe.network",
                 "https://m.stripe.com",
-                "https://hooks.stripe.com"
+                "https://hooks.stripe.com",
+                "https://api.emailjs.com"
             ],
             frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"],
             objectSrc: ["'none'"],
@@ -133,8 +136,9 @@ app.use(cors({
     origin: ['http://localhost:5173', 'http://localhost:5174'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['Authorization'],
-    credentials: true
+    exposedHeaders: ['Authorization', 'Content-Security-Policy'],
+    credentials: true,
+    maxAge: 86400 // Reset the preflight cache to ensure new CSP takes effect
 }));
 
 // Request logging middleware
@@ -206,12 +210,14 @@ app.use('/api/insurance', insuranceRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/help', helpRoutes);
 app.use('/api/admin', authenticateToken, adminRoutes);
+app.use('/api/admin/insurance', authenticateToken, adminInsuranceRoutes);
 app.use('/api/support/tickets', authenticateToken, supportTicketsRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/chat/admin', authenticateToken, adminChatRoutes);
 app.use('/api/memberships', membershipRoutes);
 app.use('/api/membership', membershipRoutes); // Alias to match frontend expectations
+app.use('/api/geocode', geocodeRoutes);
 
 // Add a direct fallback for simple chat history without authentication
 app.get('/api/simple-chat-history', (req, res) => {
@@ -238,11 +244,13 @@ console.log('- /api/insurance');
 console.log('- /api/users');
 console.log('- /api/help');
 console.log('- /api/admin');
+console.log('- /api/admin/insurance');
 console.log('- /api/support/tickets');
 console.log('- /api/payments');
 console.log('- /api/chat');
 console.log('- /api/chat/admin');
 console.log('- /api/memberships');
+console.log('- /api/geocode');
 
 // Basic test route
 app.get('/', (req, res) => {

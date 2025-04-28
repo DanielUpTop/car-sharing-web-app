@@ -131,10 +131,6 @@ const CarList = () => {
             return true;
         }
 
-        if (!userMembership) {
-            return false;
-        }
-
         const membershipLevels = {
             'none': 0,
             'basic': 1,
@@ -142,7 +138,9 @@ const CarList = () => {
             'platinum': 3
         };
 
-        const userLevel = membershipLevels[userMembership as keyof typeof membershipLevels];
+        // Treat non-members (null or undefined userMembership) as having 'basic' access
+        const userMembershipType = userMembership || 'basic';
+        const userLevel = membershipLevels[userMembershipType as keyof typeof membershipLevels];
         const requiredLevel = membershipLevels[requiredMembership as keyof typeof membershipLevels];
         
         return userLevel >= requiredLevel;
@@ -403,7 +401,9 @@ const CarList = () => {
                                             zIndex: 2
                                         }}
                                     >
-                                        {car.required_membership.toUpperCase()} ONLY
+                                        {car.required_membership === 'basic' ? 'Basic and Non-Members' : 
+                                         car.required_membership === 'premium' ? 'Premium' : 
+                                         'Platinum'}
                                     </Box>
                                 )}
                                 <CardMedia

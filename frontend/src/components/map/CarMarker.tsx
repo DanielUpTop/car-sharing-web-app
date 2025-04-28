@@ -135,10 +135,6 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
             return true;
         }
 
-        if (!userMembership) {
-            return false;
-        }
-
         const membershipLevels = {
             'none': 0,
             'basic': 1,
@@ -146,7 +142,10 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
             'platinum': 3
         };
 
-        return membershipLevels[userMembership as keyof typeof membershipLevels] >= 
+        // For non-members, treat them as having basic-level access
+        const membershipType = userMembership || 'basic';
+        
+        return membershipLevels[membershipType as keyof typeof membershipLevels] >= 
                membershipLevels[car.required_membership as keyof typeof membershipLevels];
     };
 
@@ -192,7 +191,9 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
                                     zIndex: 2
                                 }}
                             >
-                                {car.required_membership.toUpperCase()} ONLY
+                                {car.required_membership === 'basic' ? 'Basic and Non-Members' : 
+                                 car.required_membership === 'premium' ? 'Premium' : 
+                                 'Platinum'}
                             </Box>
                         )}
                         

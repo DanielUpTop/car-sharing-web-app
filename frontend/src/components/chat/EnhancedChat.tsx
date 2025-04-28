@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, FC } from 'react';
 import {
     Box,
     Typography,
@@ -78,7 +78,7 @@ interface Message {
     timestamp?: string;
 }
 
-const EnhancedChat: React.FC = () => {
+const EnhancedChat: FC = () => {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
@@ -388,7 +388,7 @@ const EnhancedChat: React.FC = () => {
                 
                 // Add the user's message
                 const optimisticMessage: Message = {
-                    id: Date.now(),
+                    id: -(Date.now()), // Use negative timestamp as temporary ID
                     conversation_id: selectedConversation.id,
                     sender_id: user?.id || 0,
                     content: messageContent,
@@ -401,11 +401,11 @@ const EnhancedChat: React.FC = () => {
                 
                 setMessages(prev => [...prev, optimisticMessage]);
                 scrollToBottom();
-                
+
                 // Add a mock response after a short delay
                 setTimeout(() => {
                     const mockResponse: Message = {
-                        id: Date.now() + 1,
+                        id: Date.now() + 2,
                         conversation_id: selectedConversation.id,
                         sender_id: 999,
                         content: "I've received your message. Our support team will assist you when the system is back online.",
@@ -427,8 +427,21 @@ const EnhancedChat: React.FC = () => {
             // For online mode: 
             // Check if we're using WebSocket or REST API
             if (ws.current && isWsConnected) {
-                // If using WebSocket, don't add an optimistic message
-                // The message will be added when the server confirms via WebSocket
+                // If using WebSocket, add optimistic user message first
+                const userMessageWs: Message = {
+                    id: -(Date.now()), // Use negative timestamp as temporary ID
+                    conversation_id: selectedConversation.id,
+                    sender_id: user?.id || 0,
+                    content: messageContent,
+                    is_read: true,
+                    created_at: new Date().toISOString(),
+                    sender_first_name: user?.first_name || '',
+                    sender_last_name: user?.last_name || '',
+                    sender_role: 'rentee'
+                };
+                setMessages(prev => [...prev, userMessageWs]);
+                // We might scroll here, or wait until after system message is added
+
                 console.log('Sending message via WebSocket');
                 
                 // Send via WebSocket
@@ -439,17 +452,32 @@ const EnhancedChat: React.FC = () => {
                         senderId: user?.id,
                         senderName: `${user?.first_name} ${user?.last_name}`,
                         timestamp: new Date().toISOString(),
-                        isAdmin: false
+                        isAdmin: false // User message is never admin
                     },
                     conversationId: selectedConversation.id
                 }));
+
+                // Add system message immediately after sending via WebSocket
+                 const systemMessageWs: Message = {
+                    id: Date.now() + 1, // Ensure unique ID
+                    conversation_id: selectedConversation.id,
+                    sender_id: 0, // System ID
+                    content: "The admin team will get back to you as soon as possible",
+                    is_read: true,
+                    is_system: true, // Explicitly set system flag
+                    created_at: new Date().toISOString(),
+                    sender_first_name: "System",
+                    sender_last_name: "",
+                    sender_role: "system"
+                };
+                setMessages(prev => [...prev, systemMessageWs]);
             } else {
                 // If using REST API, add optimistic message
                 console.log('Sending message via REST API');
                 
                 // Add optimistic message to UI
                 const optimisticMessage: Message = {
-                    id: Date.now(),
+                    id: -(Date.now()), // Use negative timestamp as temporary ID
                     conversation_id: selectedConversation.id,
                     sender_id: user?.id || 0,
                     content: messageContent,
@@ -468,11 +496,6 @@ const EnhancedChat: React.FC = () => {
                     content: messageContent
                 });
             }
-            
-            // Refresh the conversation list to update the last message
-            setTimeout(() => {
-                fetchConversations();
-            }, 1000);
         } catch (err) {
             console.error('Error sending message:', err);
             
@@ -641,12 +664,11 @@ const EnhancedChat: React.FC = () => {
 
                 if (data.type === 'message') {
                     // Process new message - only add it if it's not from the current user
-                    // This prevents duplicate messages when the user sends a message
+                    // AND it's not a system message (system messages come from initial fetch)
                     const message = data.message;
                     
-                    // Check if this message is from someone else or it's a system message 
-                    // before adding it to the UI (otherwise it will duplicate user's own messages)
-                    if (message.senderId !== user?.id) {
+                    // Check if this message is from someone else AND not a system message
+                    if (message.senderId !== user?.id && !message.is_system) { 
                         const newMessage: Message = {
                             id: message.id,
                             conversation_id: message.conversationId,
@@ -729,6 +751,12 @@ const EnhancedChat: React.FC = () => {
             
             setMessages(prev => [...prev, ratingMessage]);
             setRatingDialogOpen(false);
+
+            // **** START: Refetch messages after rating ****
+            if (selectedConversation) {
+                fetchMessages(selectedConversation.id);
+            }
+            // **** END: Refetch messages after rating ****
             
         } catch (error) {
             console.error('Error submitting rating:', error);
@@ -1109,7 +1137,8 @@ const EnhancedChat: React.FC = () => {
                                 }}>
                                     {messages.map((message) => {
                                         const isAdmin = message.sender_role === 'admin' || message.isAdmin;
-                                        const isSystem = message.is_system;
+                                        // Check both is_system flag AND null sender_id
+                                        const isSystem = message.is_system === true || message.sender_id === null;
                                         
                                         if (isSystem) {
                                             // System message
@@ -1205,19 +1234,21 @@ const EnhancedChat: React.FC = () => {
                                         <Box sx={{ display: 'flex', gap: 2 }}>
                                             <TextField
                                                 fullWidth
-                                                placeholder="Type your message..."
+                                                placeholder={selectedConversation?.status === 'closed' ? "Chat closed" : "Type your message..."}
                                                 variant="outlined"
                                                 size="small"
                                                 value={newMessage}
                                                 onChange={(e) => setNewMessage(e.target.value)}
                                                 onKeyPress={handleKeyPress}
                                                 sx={{ backgroundColor: 'white', flex: 1 }}
+                                                disabled={selectedConversation?.status === 'closed'}
                                             />
                                             <Button
                                                 variant="contained"
                                                 color="primary"
                                                 endIcon={<SendIcon />}
                                                 onClick={handleSendMessage}
+                                                disabled={selectedConversation?.status === 'closed' || !newMessage.trim()}
                                             >
                                                 Send
                                             </Button>

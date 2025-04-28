@@ -639,6 +639,30 @@ Updated SQL schema for better data relationships
   - Improved error handling in insurance-related components
   - Ensured backward compatibility with existing API responses
 
+### April 28, 2024
+- **Booking Dialog Z-Index:** Resolved an issue where the date picker calendar was appearing behind the booking modal (`BookingDialog.tsx`) by significantly increasing the `zIndex` of the DateTimePicker's Popper component.
+- **Map View Icon:** Restored the missing "Use current location" icon (`MyLocationIcon`) in the Map View component (`MapView.tsx`).
+- **Live Chat System Message & Persistence:**
+    - **Initial Problem:** The system message ("The admin team will get back to you...") wasn't appearing after a user sent a message, and messages weren't persisting correctly.
+    - **Component Identification:** Determined the active chat component was `EnhancedChat.tsx`, not `Chat.tsx`.
+    - **Backend Logic:** Modified the backend WebSocket handler (`chatHandler.js`) to automatically save the system message in the database (`messages` table with `sender_id = NULL` and `is_system = TRUE`) immediately after saving the user's message. Ensured the WebSocket only sends the *user's* message back as confirmation, not the system message.
+    - **Database Schema:** Updated the `initChatTables` function in `chatHandler.js` to:
+        - Add `is_admin` column check/alter to `messages` table.
+        - Modify `sender_id` column in `messages` table to allow `NULL` values (using `ALTER TABLE` if necessary).
+        - Add `rating` and `rated_at` columns check/alter to `conversations` table.
+    - **Frontend Logic:** Removed the local addition of the system message from `EnhancedChat.tsx`'s `handleSendMessage` function, relying on the backend to provide it.
+    - **Message Fetching:** Updated the backend route (`chatRoutes.js`) for fetching messages to use `LEFT JOIN` on the `users` table, ensuring messages with `sender_id = NULL` (like system messages) are included.
+    - **Frontend Rendering:** Modified the message rendering logic in `EnhancedChat.tsx` to identify system messages by checking for `message.is_system === true` OR `message.sender_id === null`.
+- **Live Chat Duplicate Message/Key Warnings:**
+    - **Duplicate System Message:** Addressed the issue of the system message appearing twice by ensuring the backend didn't send it via WebSocket and the frontend ignored system messages arriving via WebSocket.
+    - **React Key Warning:** Prevented potential React key collisions by changing temporary optimistic message IDs in `EnhancedChat.tsx` to use negative timestamps (`-Date.now()`). Standardized component type to `FC`.
+- **Live Chat Rating & Closing:**
+    - **Rating Submission Error:** Fixed a 500 error during rating submission by ensuring the `rating` and `rated_at` columns exist in the `conversations` database table.
+    - **Rating Message Style:** Modified the backend rating submission route (`chatRoutes.js`) to save the rating confirmation message with `sender_id = NULL` and `is_system = TRUE`, so it appears as a system message.
+    - **Rating Display:** Updated the frontend `submitRating` function in `EnhancedChat.tsx` to refetch messages after successful submission, ensuring the rating message appears.
+    - **Chat Input Disabling:** Added logic to `EnhancedChat.tsx` to disable the message input field and send button when the selected conversation's status is 'closed'.
+- **Backend Stability:** Resolved multiple `EADDRINUSE` errors on backend startup by identifying and terminating lingering node processes occupying port 5001.
+
 ## Notes
 - Regular code reviews and pair programming for critical features
 - Continuous integration with automated testing

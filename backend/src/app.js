@@ -16,8 +16,10 @@ const chatRoutes = require('./routes/chatRoutes');
 const adminChatRoutes = require('./routes/adminChatRoutes');
 const supportTicketsRoutes = require('./routes/supportTicketsRoutes');
 const insuranceRoutes = require('./routes/insuranceRoutes');
+const adminInsuranceRoutes = require('./routes/adminInsuranceRoutes');
 const membershipRoutes = require('./routes/membershipRoutes');
 const helpRoutes = require('./routes/helpRoutes');
+const geocodeRoutes = require('./routes/geocodeRoutes');
 
 const app = express();
 
@@ -74,6 +76,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/bookings', adminBookingRoutes);
+app.use('/api/admin/insurance', adminInsuranceRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/chat/admin', adminChatRoutes);
@@ -81,6 +84,7 @@ app.use('/api/support/tickets', supportTicketsRoutes);
 app.use('/api/insurance', insuranceRoutes);
 app.use('/api/memberships', membershipRoutes);
 app.use('/api/help', helpRoutes);
+app.use('/api/geocode', geocodeRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

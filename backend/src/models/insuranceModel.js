@@ -27,11 +27,39 @@ class Insurance {
                     description TEXT NOT NULL,
                     claim_amount DECIMAL(10,2) NOT NULL,
                     status ENUM('pending', 'approved', 'rejected', 'paid') DEFAULT 'pending',
+                    admin_notes TEXT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     FOREIGN KEY (policy_id) REFERENCES insurance_policies(id) ON DELETE CASCADE
                 )
             `);
+
+            // Create claim_documents table if it doesn't exist
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS claim_documents (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    claim_id INT NOT NULL,
+                    file_path VARCHAR(255) NOT NULL,
+                    file_name VARCHAR(255) NOT NULL,
+                    file_type VARCHAR(100) NOT NULL,
+                    description TEXT NULL,
+                    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (claim_id) REFERENCES insurance_claims(id) ON DELETE CASCADE
+                )
+            `);
+
+            // Check if admin_notes column exists in insurance_claims, add it if not
+            const [columns] = await db.query(`
+                SHOW COLUMNS FROM insurance_claims LIKE 'admin_notes'
+            `);
+            
+            if (columns.length === 0) {
+                await db.query(`
+                    ALTER TABLE insurance_claims 
+                    ADD COLUMN admin_notes TEXT NULL AFTER status
+                `);
+                console.log('Added admin_notes column to insurance_claims table');
+            }
 
             console.log('Insurance tables created successfully');
         } catch (error) {

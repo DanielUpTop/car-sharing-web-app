@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
 const logger = require('../utils/logger');
+const { JWT_SECRET } = require('../config/jwtConfig');
 
 const authenticateToken = async (req, res, next) => {
     try {
@@ -14,9 +15,8 @@ const authenticateToken = async (req, res, next) => {
 
         let decoded;
         try {
-            // Use environment variable for JWT secret or fallback to a default for development
-            const jwtSecret = process.env.JWT_SECRET || 'your-secret-key';
-            decoded = jwt.verify(token, jwtSecret);
+            // Use the consistent JWT_SECRET from config
+            decoded = jwt.verify(token, JWT_SECRET);
             console.log('Decoded token:', decoded); // Debug log
         } catch (error) {
             logger.error('JWT verification failed:', error);

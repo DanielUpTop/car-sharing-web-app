@@ -371,10 +371,6 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
             return true;
         }
 
-        if (!membership) {
-            return false;
-        }
-
         const membershipLevels = {
             'none': 0,
             'basic': 1,
@@ -382,11 +378,12 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
             'platinum': 3
         };
 
-        // Add type guard to ensure membership.type is a valid key
-        const membershipType = membership.type as keyof typeof membershipLevels;
+        // For non-members, treat them as having basic-level access 
+        // which means they can book basic cars but not premium/platinum
+        const membershipType = membership ? membership.type : 'basic';
         const requiredType = car.required_membership as keyof typeof membershipLevels;
         
-        return membershipLevels[membershipType] >= membershipLevels[requiredType];
+        return membershipLevels[membershipType as keyof typeof membershipLevels] >= membershipLevels[requiredType];
     };
 
     const renderStepContent = () => {
@@ -464,6 +461,11 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                                         },
                                         actionBar: {
                                             actions: ['clear', 'accept']
+                                        },
+                                        popper: {
+                                            sx: {
+                                                zIndex: 9999
+                                            }
                                         }
                                     }}
                                 />
@@ -491,6 +493,11 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                                         },
                                         actionBar: {
                                             actions: ['clear', 'accept']
+                                        },
+                                        popper: {
+                                            sx: {
+                                                zIndex: 9999
+                                            }
                                         }
                                     }}
                                 />
@@ -679,7 +686,7 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                         </Paper>
                         
                         {/* Temporarily commented out for debugging admin login issue */}
-                        {/* {clientSecret && (
+                        {clientSecret && (
                             <Box sx={{ mt: 3 }}>
                                 <PaymentProvider
                                     clientSecret={clientSecret}
@@ -688,7 +695,7 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                                     amount={calculateTotalPrice()}
                                 />
                             </Box>
-                        )} */}
+                        )}
                     </Box>
                 );
             default:
@@ -703,6 +710,7 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                 onClose={onClose} 
                 maxWidth="sm" 
                 fullWidth
+                sx={{ zIndex: 1300 }}
             >
                 <StyledDialogTitle>
                     Book {car.make} {car.model}

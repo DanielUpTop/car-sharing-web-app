@@ -108,13 +108,22 @@ const Chat: React.FC = () => {
                                  isAdmin: Boolean(receivedMsg.isAdmin)
                              };
                              
-                             console.log('Adding formatted message to state:', formattedMsg);
-                             setMessages(prev => {
-                                 console.log('Previous messages state:', prev);
-                                 const newState = [...prev, formattedMsg];
-                                 console.log('New messages state:', newState);
-                                 return newState;
-                             });
+                             // **** Add check here: Only add if not from current user or system (senderId 0) ****
+                             if (formattedMsg.senderId !== (user?.id || 0) && formattedMsg.senderId !== 0) {
+                                 console.log('Adding message received via WebSocket to state:', formattedMsg);
+                                 setMessages(prev => {
+                                     // Optional: Prevent duplicates if ID already exists
+                                     if (prev.some(msg => msg.id === formattedMsg.id)) {
+                                         return prev;
+                                     }
+                                     console.log('Previous messages state:', prev.length);
+                                     const newState = [...prev, formattedMsg];
+                                     console.log('New messages state:', newState.length);
+                                     return newState;
+                                 });
+                             } else {
+                                 console.log('Ignoring message received via WebSocket (likely echo):', formattedMsg.id);
+                             }
                          } else {
                              console.error('Received message object has unexpected structure:', receivedMsg);
                          }
@@ -297,11 +306,27 @@ const Chat: React.FC = () => {
                 isAdmin: false
             };
             
-            // Add user message to UI immediately
-            setMessages(prevMessages => [...prevMessages, userMessage]);
-            scrollToBottom();
+            // Create system message object
+            const systemMessage: Message = {
+                id: Date.now() + 1, // Ensure unique ID
+                content: "The admin team will get back to you as soon as possible",
+                senderId: 0,
+                senderName: "System",
+                timestamp: new Date().toISOString(),
+                isAdmin: true
+            };
+
+            // Add both messages to UI immediately in one state update
+            setMessages(prevMessages => {
+                console.log(`[setMessages in handleSendMessage] Adding user message ID: ${userMessage.id} and system message ID: ${systemMessage.id}`);
+                const newMessages = [...prevMessages, userMessage, systemMessage];
+                console.log(`[setMessages in handleSendMessage] New state length: ${newMessages.length}. Last two messages:`, newMessages.slice(-2));
+                return newMessages;
+            });
             
-            // Send the message via WebSocket
+            scrollToBottom(); // Scroll after adding both messages
+            
+            // Send the user message via WebSocket
             const messageToSend = {
                 type: 'message',
                 message: {
@@ -315,28 +340,7 @@ const Chat: React.FC = () => {
             console.log('Sending message via WebSocket:', messageToSend);
             ws.current.send(JSON.stringify(messageToSend));
             
-            // Add system message after a short delay
-            setTimeout(() => {
-                console.log('Adding system message...');
-                const systemMessage: Message = {
-                    id: Date.now() + 1000, // Ensure unique ID
-                    content: "The admin team will get back to you as soon as possible",
-                    senderId: 0,
-                    senderName: "System",
-                    timestamp: new Date().toISOString(),
-                    isAdmin: true
-                };
-                console.log('System message:', systemMessage);
-                setMessages(prevMessages => {
-                    console.log('Previous messages before adding system:', prevMessages.length);
-                    const newMessages = [...prevMessages, systemMessage];
-                    console.log('New messages after adding system:', newMessages.length);
-                    return newMessages;
-                });
-                scrollToBottom();
-            }, 1000);
-
-            // Also send via REST API as fallback (optional, keep if needed)
+            // Also send via REST API as fallback 
             try {
                  fetch('http://localhost:5001/api/simple-message', {
                     method: 'POST',
@@ -381,6 +385,9 @@ const Chat: React.FC = () => {
             </Box>
         );
     }
+
+    // Log messages state right before returning JSX
+    console.log('[Render] Messages state before returning JSX:', messages);
 
     return (
         <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -494,116 +501,120 @@ const Chat: React.FC = () => {
                                 <Typography variant="body2" color="text.secondary">Start a conversation with our support team</Typography>
                             </Box>
                         )}
-                        {messages.map((message) => (
-                            message.senderId === 0 ? (
+                        {messages.map((message: Message): React.ReactNode => {
+                            if (message.senderId === 0) {
                                 // Special System Message Component
-                                <Box
-                                    key={message.id}
-                                    sx={{
-                                        width: '100%',
-                                        my: 2,
-                                        display: 'flex',
-                                        justifyContent: 'center'
-                                    }}
-                                >
-                                    <Paper
-                                        elevation={1}
+                                return (
+                                    <Box
+                                        key={message.id}
                                         sx={{
-                                            p: 2,
-                                            bgcolor: '#e8f5e9',
-                                            border: '1px dashed #4caf50',
-                                            borderRadius: 2,
-                                            textAlign: 'center',
-                                            maxWidth: '80%',
-                                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                                            width: '100%',
+                                            my: 2,
+                                            display: 'flex',
+                                            justifyContent: 'center'
                                         }}
                                     >
-                                        <Typography variant="body2" fontStyle="italic" color="text.secondary">
-                                            {message.content}
-                                        </Typography>
-                                    </Paper>
-                                </Box>
-                            ) : (
+                                        <Paper
+                                            elevation={1}
+                                            sx={{
+                                                p: 2,
+                                                bgcolor: '#e8f5e9',
+                                                border: '1px dashed #4caf50',
+                                                borderRadius: 2,
+                                                textAlign: 'center',
+                                                maxWidth: '80%',
+                                                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                                            }}
+                                        >
+                                            <Typography variant="body2" fontStyle="italic" color="text.secondary">
+                                                {message.content}
+                                            </Typography>
+                                        </Paper>
+                                    </Box>
+                                );
+                            } else {
                                 // Regular User/Admin Message
-                            <Box
-                                key={message.id}
-                                sx={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: message.isAdmin ? 'flex-start' : 'flex-end',
-                                    maxWidth: '70%',
-                                    alignSelf: message.isAdmin ? 'flex-start' : 'flex-end',
-                                }}
-                            >
-                                <Box sx={{ 
-                                    display: 'flex', 
-                                    alignItems: 'flex-start',
-                                    flexDirection: message.isAdmin ? 'row' : 'row-reverse',
-                                    gap: 1
-                                }}>
-                                    <Avatar 
-                                        sx={{ 
-                                            width: 32, 
-                                            height: 32,
-                                                bgcolor: message.senderId === 0 ? '#4caf50' : (message.isAdmin ? '#1976d2' : '#8bc34a'),
-                                            fontSize: '0.875rem',
-                                            mt: 0.5
-                                }}
-                            >
-                                            {message.senderId === 0 ? 'S' : (message.isAdmin ? 'S' : user?.first_name?.charAt(0) || 'U')}
-                                    </Avatar>
-                                <Paper
-                                    elevation={1}
-                                    sx={{
-                                        p: 2,
-                                                bgcolor: message.senderId === 0 ? '#e8f5e9' : (message.isAdmin ? 'white' : '#e3f2fd'),
-                                            color: 'text.primary',
-                                            borderRadius: 2,
-                                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                            position: 'relative',
-                                                fontStyle: message.senderId === 0 ? 'italic' : 'normal',
-                                                width: message.senderId === 0 ? '100%' : 'auto',
-                                            '&::before': message.isAdmin ? {
-                                                content: '""',
-                                                position: 'absolute',
-                                                top: 10,
-                                                left: -8,
-                                                borderStyle: 'solid',
-                                                borderWidth: '8px 8px 8px 0',
-                                                    borderColor: `transparent ${message.senderId === 0 ? '#e8f5e9' : 'white'} transparent transparent`,
-                                            } : {
-                                                content: '""',
-                                                position: 'absolute',
-                                                top: 10,
-                                                right: -8,
-                                                borderStyle: 'solid',
-                                                borderWidth: '8px 0 8px 8px',
-                                                borderColor: 'transparent transparent transparent #e3f2fd',
-                                            }
-                                    }}
-                                >
-                                        <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                                            {message.content}
+                                return (
+                                    <Box
+                                        key={message.id}
+                                        sx={{
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: message.isAdmin ? 'flex-start' : 'flex-end',
+                                            maxWidth: '70%',
+                                            alignSelf: message.isAdmin ? 'flex-start' : 'flex-end',
+                                        }}
+                                    >
+                                        <Box sx={{ 
+                                            display: 'flex', 
+                                            alignItems: 'flex-start',
+                                            flexDirection: message.isAdmin ? 'row' : 'row-reverse',
+                                            gap: 1
+                                        }}>
+                                            <Avatar 
+                                                sx={{ 
+                                                    width: 32, 
+                                                    height: 32,
+                                                        bgcolor: message.senderId === 0 ? '#4caf50' : (message.isAdmin ? '#1976d2' : '#8bc34a'),
+                                                    fontSize: '0.875rem',
+                                                    mt: 0.5
+                                        }}
+                                    >
+                                                    {message.senderId === 0 ? 'S' : (message.isAdmin ? 'S' : user?.first_name?.charAt(0) || 'U')}
+                                            </Avatar>
+                                        <Paper
+                                            elevation={1}
+                                            sx={{
+                                                p: 2,
+                                                        bgcolor: message.senderId === 0 ? '#e8f5e9' : (message.isAdmin ? 'white' : '#e3f2fd'),
+                                                    color: 'text.primary',
+                                                    borderRadius: 2,
+                                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                                    position: 'relative',
+                                                        fontStyle: message.senderId === 0 ? 'italic' : 'normal',
+                                                        width: message.senderId === 0 ? '100%' : 'auto',
+                                                    '&::before': message.isAdmin ? {
+                                                        content: '""',
+                                                        position: 'absolute',
+                                                        top: 10,
+                                                        left: -8,
+                                                        borderStyle: 'solid',
+                                                        borderWidth: '8px 8px 8px 0',
+                                                            borderColor: `transparent ${message.senderId === 0 ? '#e8f5e9' : 'white'} transparent transparent`,
+                                                    } : {
+                                                        content: '""',
+                                                        position: 'absolute',
+                                                        top: 10,
+                                                        right: -8,
+                                                        borderStyle: 'solid',
+                                                        borderWidth: '8px 0 8px 8px',
+                                                        borderColor: 'transparent transparent transparent #e3f2fd',
+                                                    }
+                                            }}
+                                        >
+                                                <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                                                    {message.content}
+                                                </Typography>
+                                        </Paper>
+                                        </Box>
+                                        <Typography 
+                                            variant="caption" 
+                                            sx={{ 
+                                                mt: 0.5,
+                                                px: 1.5,
+                                                color: 'text.secondary',
+                                                alignSelf: message.isAdmin ? 'flex-start' : 'flex-end',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 0.5
+                                            }}
+                                        >
+                                            {message.timestamp && format(new Date(message.timestamp), 'MMM d, h:mm a')}
                                         </Typography>
-                                </Paper>
-                                </Box>
-                                <Typography 
-                                    variant="caption" 
-                                    sx={{ 
-                                        mt: 0.5,
-                                        px: 1.5,
-                                        color: 'text.secondary',
-                                        alignSelf: message.isAdmin ? 'flex-start' : 'flex-end',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 0.5
-                                    }}
-                                >
-                                    {message.timestamp && format(new Date(message.timestamp), 'MMM d, h:mm a')}
-                                </Typography>
-                            </Box>
-                            )
-                        ))}
+                                    </Box>
+                                );
+                            }
+                        })}
                         <div ref={messagesEndRef} />
                     </>
                 )}

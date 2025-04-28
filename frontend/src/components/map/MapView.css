@@ -50,6 +50,8 @@
 .map-search-field {
     background: white;
     border-radius: 4px;
+    position: relative;
+    z-index: 10;
 }
 
 .map-search-field .MuiInputBase-root {
@@ -62,4 +64,92 @@
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    position: relative;
+}
+
+/* Search results dropdown */
+.search-results-dropdown {
+    max-height: 300px;
+    overflow-y: auto;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 9999 !important; /* Ensure the dropdown is above everything */
+    background-color: white;
+    width: calc(100% - 16px);
+    position: absolute !important;
+}
+
+/* Override any z-index conflicts */
+.MuiPortal-root {
+    z-index: 999999 !important;
+}
+
+/* Make results more visible */
+.search-result-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.search-result-item:hover {
+    background-color: rgba(25, 118, 210, 0.08);
+}
+
+/* Improve visibility of dropdown items */
+.MuiListItem-root.MuiListItem-button:hover {
+    background-color: rgba(25, 118, 210, 0.12) !important;
+}
+
+/* Location marker */
+.location-marker-icon {
+    color: #ff4d4f;
+    font-size: 24px;
+}
+
+/* Current location button */
+.current-location-button {
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transition: all 0.2s;
+    background-color: #fff;
+}
+
+.current-location-button:hover {
+    background-color: #f0f0f0;
+}
+
+/* Loading indicator */
+.loading-spinner {
+    color: #1976d2;
+}
+
+/* Notification */
+.location-notification {
+    background: #fff;
+    color: #333;
+    border-left: 4px solid #1976d2;
+    padding: 16px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Override MUI z-index values to ensure our dropdowns appear on top */
+.MuiPopover-root {
+    z-index: 9999 !important;
+}
+
+.MuiModal-root {
+    z-index: 9999 !important;
+}
+
+/* Ensure all Leaflet controls are behind our dropdowns */
+.leaflet-top, 
+.leaflet-bottom {
+    z-index: 800;
 } 

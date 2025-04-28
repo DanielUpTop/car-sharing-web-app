@@ -61,7 +61,26 @@ const Login = () => {
 
         } catch (err: any) {
             console.error('Login error:', err);
-            setError(err.message || 'Failed to login');
+            
+            // Handle specific error responses from the backend
+            if (err.response) {
+                // The request was made and the server responded with a status code
+                const { data, status } = err.response;
+                
+                if (status === 401) {
+                    setError(data.message || 'Invalid email or password');
+                } else if (status === 403) {
+                    setError(data.message || 'Account is not active');
+                } else {
+                    setError(data.message || 'An error occurred during login');
+                }
+            } else if (err.request) {
+                // The request was made but no response was received
+                setError('No response from server. Please try again later.');
+            } else {
+                // Something happened in setting up the request
+                setError(err.message || 'Failed to login');
+            }
         } finally {
             setIsLoading(false);
         }

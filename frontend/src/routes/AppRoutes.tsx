@@ -15,6 +15,7 @@ import AdminLayout from '../components/admin/AdminLayout';
 import AdminDashboard from '../components/admin/AdminDashboard';
 import MembershipManagement from '../components/admin/MembershipManagement';
 import SupportTickets from '../components/admin/support/SupportTickets';
+import InsuranceManagement from '../components/admin/InsuranceManagement';
 
 const AppRoutes = () => {
     return (
@@ -75,6 +76,10 @@ const AppRoutes = () => {
                 <Route 
                     path="tickets" 
                     element={<ProtectedRoute allowedRoles={["admin"]}><SupportTickets /></ProtectedRoute>} 
+                />
+                <Route 
+                    path="insurance" 
+                    element={<ProtectedRoute allowedRoles={["admin"]}><InsuranceManagement /></ProtectedRoute>} 
                 />
             </Route>
         </Routes>

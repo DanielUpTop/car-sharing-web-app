@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { Container, Paper, Typography, CircularProgress, Alert } from '@mui/material';
 
-const VerifyEmail = () => {
+interface VerifyEmailProps {
+    manualMode?: boolean;
+}
+
+const VerifyEmail: React.FC<VerifyEmailProps> = ({ manualMode = false }) => {
     const [searchParams] = useSearchParams();
+    const params = useParams();
     const navigate = useNavigate();
     const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
     const [message, setMessage] = useState('');
@@ -11,8 +16,9 @@ const VerifyEmail = () => {
     useEffect(() => {
         const verifyEmail = async () => {
             try {
-                const token = searchParams.get('token');
-                console.log('Verification token:', token);
+                // Get token from search params or route params (for manual verification)
+                const token = manualMode ? params.token : searchParams.get('token');
+                console.log('Verification token:', token, manualMode ? '(manual mode)' : '');
 
                 if (!token) {
                     setStatus('error');
@@ -51,7 +57,7 @@ const VerifyEmail = () => {
         };
 
         verifyEmail();
-    }, [searchParams, navigate]);
+    }, [searchParams, navigate, manualMode, params.token]);
 
     return (
         <Container component="main" maxWidth="xs">
