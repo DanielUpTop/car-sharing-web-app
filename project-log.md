@@ -663,6 +663,13 @@ Updated SQL schema for better data relationships
     - **Chat Input Disabling:** Added logic to `EnhancedChat.tsx` to disable the message input field and send button when the selected conversation's status is 'closed'.
 - **Backend Stability:** Resolved multiple `EADDRINUSE` errors on backend startup by identifying and terminating lingering node processes occupying port 5001.
 
+
+### April 28th, 2024.
+   Membership System Enhancements & Fixes
+- Fixed issue where switching membership plans did not update the user's current membership by correcting the API endpoint call in `MembershipView.tsx` to use `/api/memberships/upgrade`.
+- Resolved a CSS `z-index` issue where the date picker component was appearing behind the booking modal dialog.
+
+
 ## Notes
 - Regular code reviews and pair programming for critical features
 - Continuous integration with automated testing

@@ -168,33 +168,35 @@ class MembershipController {
   static async upgradeMembership(req, res) {
     try {
       const userId = req.user.id;
-      const { type } = req.body;
+      const { membershipType } = req.body; 
       
-      if (!type) {
+      if (!membershipType) {
         return res.status(400).json({ error: 'Membership type is required' });
       }
 
       // Check if user has an active membership
-      const existingMembership = await Membership.getUserMembership(userId);
+      let existingMembership = await Membership.getUserMembership(userId);
+      let finalMembershipDetails;
       
       if (existingMembership) {
         // Update existing membership
-        await Membership.updateMembership(userId, type);
-        return res.status(200).json({ 
-          message: 'Membership upgraded successfully',
-          membershipType: type
-        });
+        console.log(`[upgradeMembership] Updating existing membership (ID: ${existingMembership.id}) for user ${userId} to type ${membershipType}`);
+        await Membership.updateMembership(userId, membershipType);
+        // Fetch the updated membership details
+        finalMembershipDetails = await Membership.getUserMembership(userId); 
+        console.log(`[upgradeMembership] Fetched updated membership details:`, finalMembershipDetails);
+        return res.status(200).json(finalMembershipDetails); // Return updated details
       } else {
         // Create new membership for the user
-        const result = await Membership.create(userId, type);
-        return res.status(201).json({ 
-          message: 'New membership created successfully', 
-          membershipId: result.membershipId,
-          membershipType: type
-        });
+        console.log(`[upgradeMembership] Creating new membership for user ${userId} with type ${membershipType}`);
+        const result = await Membership.create(userId, membershipType);
+        // Fetch the newly created membership details by its ID
+        finalMembershipDetails = await Membership.getMembershipById(result.membershipId);
+        console.log(`[upgradeMembership] Fetched new membership details:`, finalMembershipDetails);
+        return res.status(201).json(finalMembershipDetails); // Return new details
       }
     } catch (error) {
-      console.error('Error upgrading membership:', error);
+      console.error('[upgradeMembership] Error upgrading membership:', error);
       return res.status(500).json({ error: 'Failed to upgrade membership' });
     }
   }
