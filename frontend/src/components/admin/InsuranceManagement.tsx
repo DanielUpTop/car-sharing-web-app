@@ -358,7 +358,7 @@ const InsuranceManagement: React.FC = () => {
     if (error) {
         return (
              <Box sx={{ p: 3 }}>
-                 <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
+                 <Typography variant="h4" gutterBottom sx={{ mb: 3, color: 'black' }}>
                     Insurance Management
                  </Typography>
                  <Alert severity="error" sx={{ m: 2 }}>
@@ -370,7 +370,7 @@ const InsuranceManagement: React.FC = () => {
 
     return (
         <Box sx={{ p: 3 }}>
-            <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
+            <Typography variant="h4" gutterBottom sx={{ mb: 3, color: 'black' }}>
                 Insurance Claims Management
             </Typography>
 

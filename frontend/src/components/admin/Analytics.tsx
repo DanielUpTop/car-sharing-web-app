@@ -148,7 +148,7 @@ const Analytics = () => {
 
     return (
         <Box>
-            <Typography variant="h4" gutterBottom>
+            <Typography variant="h4" gutterBottom color="black">
                 Analytics Dashboard
             </Typography>
 
@@ -160,7 +160,11 @@ const Analytics = () => {
                         value={`£${data.overview.totalRevenue.toLocaleString()}`}
                         icon={<RevenueIcon fontSize="large" />}
                         color="#2e7d32"
-                        subtext={`${data.overview.revenueGrowth >= 0 ? '+' : ''}${data.overview.revenueGrowth}% vs last month`}
+                        subtext={
+                            typeof data.overview.revenueGrowth === 'number'
+                                ? `${data.overview.revenueGrowth >= 0 ? '+' : ''}${data.overview.revenueGrowth.toFixed(1)}% vs last month`
+                                : 'vs last month'
+                        }
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
@@ -169,7 +173,11 @@ const Analytics = () => {
                         value={data.overview.totalBookings}
                         icon={<BookingIcon fontSize="large" />}
                         color="#1976d2"
-                        subtext={`${data.overview.bookingGrowth >= 0 ? '+' : ''}${data.overview.bookingGrowth}% vs last month`}
+                        subtext={
+                            typeof data.overview.bookingGrowth === 'number'
+                                ? `${data.overview.bookingGrowth >= 0 ? '+' : ''}${data.overview.bookingGrowth.toFixed(1)}% vs last month`
+                                : 'vs last month'
+                        }
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
@@ -191,7 +199,7 @@ const Analytics = () => {
 
                 {/* Revenue Chart */}
                 <Grid item xs={12} md={8}>
-                    <Paper sx={{ p: 2, height: 400 }}>
+                    <Paper sx={{ p: 3, height: 500 }}>
                         <Typography variant="h6" gutterBottom>
                             Revenue Trend
                         </Typography>
@@ -202,14 +210,14 @@ const Analytics = () => {
                                     top: 5,
                                     right: 30,
                                     left: 20,
-                                    bottom: 5,
+                                    bottom: 20,
                                 }}
                             >
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="month" />
                                 <YAxis />
                                 <Tooltip formatter={(value) => `£${value}`} />
-                                <Legend />
+                                <Legend verticalAlign="top" />
                                 <Line
                                     type="monotone"
                                     dataKey="revenue"
@@ -224,12 +232,12 @@ const Analytics = () => {
 
                 {/* Booking Status Chart */}
                 <Grid item xs={12} md={4}>
-                    <Paper sx={{ p: 2, height: 400 }}>
+                    <Paper sx={{ p: 3, height: 500 }}>
                         <Typography variant="h6" gutterBottom>
                             Bookings by Status
                         </Typography>
                         <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
+                            <PieChart margin={{ left: 60 }}>
                                 <Pie
                                     data={data.bookingsByStatus}
                                     cx="50%"
@@ -246,7 +254,7 @@ const Analytics = () => {
                                     ))}
                                 </Pie>
                                 <Tooltip />
-                                <Legend />
+                                <Legend verticalAlign="top" />
                             </PieChart>
                         </ResponsiveContainer>
                     </Paper>
@@ -254,8 +262,8 @@ const Analytics = () => {
 
                 {/* Popular Cars Chart */}
                 <Grid item xs={12}>
-                    <Paper sx={{ p: 2, height: 400 }}>
-                        <Typography variant="h6" gutterBottom>
+                    <Paper sx={{ p: 3, height: 500 }}>
+                        <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
                             Popular Cars Performance
                         </Typography>
                         <ResponsiveContainer width="100%" height="100%">
@@ -265,7 +273,7 @@ const Analytics = () => {
                                     top: 5,
                                     right: 30,
                                     left: 20,
-                                    bottom: 5,
+                                    bottom: 20,
                                 }}
                             >
                                 <CartesianGrid strokeDasharray="3 3" />
@@ -273,7 +281,7 @@ const Analytics = () => {
                                 <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
                                 <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
                                 <Tooltip />
-                                <Legend />
+                                <Legend verticalAlign="top" />
                                 <Bar yAxisId="left" dataKey="bookings" fill="#8884d8" name="Bookings" />
                                 <Bar yAxisId="right" dataKey="revenue" fill="#82ca9d" name="Revenue" />
                             </BarChart>

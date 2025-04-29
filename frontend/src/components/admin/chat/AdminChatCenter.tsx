@@ -42,6 +42,7 @@ interface Message {
     sender_first_name: string;
     sender_last_name: string;
     sender_role: string;
+    is_system?: boolean;
     created_at: string;
 }
 
@@ -92,6 +93,7 @@ const AdminChatCenter = () => {
 
             if (!response.ok) throw new Error('Failed to fetch messages');
             const data = await response.json();
+            console.log('Fetched Messages Data:', data);
             setMessages(data);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
@@ -224,31 +226,46 @@ const AdminChatCenter = () => {
                                 </Box>
 
                                 <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
-                                    {messages.map((message) => (
-                                        <Box
-                                            key={message.id}
-                                            sx={{
-                                                display: 'flex',
-                                                justifyContent: message.sender_role === 'admin' ? 'flex-end' : 'flex-start',
-                                                mb: 2
-                                            }}
-                                        >
-                                            <Paper
+                                    {messages.map((message) => {
+                                        const isSystemMessage = message.sender_role === 'system' || message.sender_role === 'rating';
+                                        const isAdminMessage = message.sender_role === 'admin';
+
+                                        return (
+                                            <Box
+                                                key={message.id}
                                                 sx={{
-                                                    p: 2,
-                                                    maxWidth: '70%',
-                                                    bgcolor: message.sender_role === 'admin' ? 'primary.light' : 'grey.100',
-                                                    color: message.sender_role === 'admin' ? 'white' : 'text.primary'
+                                                    display: 'flex',
+                                                    justifyContent: isSystemMessage
+                                                        ? 'center'
+                                                        : isAdminMessage ? 'flex-end' : 'flex-start',
+                                                    mb: 2,
                                                 }}
                                             >
-                                                <Typography variant="body1">{message.content}</Typography>
-                                                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                                                    {message.sender_first_name} {message.sender_last_name} •{' '}
-                                                    {format(new Date(message.created_at), 'PPp')}
-                                                </Typography>
-                                            </Paper>
-                                        </Box>
-                                    ))}
+                                                <Paper
+                                                    sx={{
+                                                        p: isSystemMessage ? 1 : 2,
+                                                        maxWidth: isSystemMessage ? '80%' : '70%',
+                                                        bgcolor: isSystemMessage
+                                                            ? 'grey.300' // System message background
+                                                            : isAdminMessage ? 'primary.light' : 'grey.100', // Admin vs User message background
+                                                        color: isSystemMessage
+                                                            ? 'text.secondary' // System message text color
+                                                            : isAdminMessage ? 'white' : 'text.primary', // Admin vs User text color
+                                                        textAlign: isSystemMessage ? 'center' : 'left',
+                                                        borderRadius: isSystemMessage ? '10px' : '4px'
+                                                    }}
+                                                >
+                                                    <Typography variant="body1">{message.content}</Typography>
+                                                    {!isSystemMessage && ( // Only show sender/time if NOT a system/rating message
+                                                        <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                                                            {`${message.sender_first_name || ''} ${message.sender_last_name || ''}`.trim() || (isAdminMessage ? 'Admin' : 'User')} •{' '}
+                                                            {format(new Date(message.created_at), 'PPp')}
+                                                        </Typography>
+                                                    )}
+                                                </Paper>
+                                            </Box>
+                                        );
+                                    })}
                                 </Box>
 
                                 <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>

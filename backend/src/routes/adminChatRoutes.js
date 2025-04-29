@@ -31,6 +31,9 @@ router.get('/conversations/:conversationId/messages', adminChatController.getCon
 // Send a message to a conversation as admin
 router.post('/conversations/:conversationId/messages', adminChatController.sendMessage);
 
+// Close a conversation as admin
+router.put('/conversations/:conversationId/close', adminChatController.closeConversation);
+
 // Delete a conversation
 router.delete('/conversations/:conversationId', adminChatController.deleteConversation);
 

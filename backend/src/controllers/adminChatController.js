@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const logger = require('../utils/logger');
 
 /**
  * Get all conversations with user details, message count, and last message
@@ -199,9 +200,12 @@ const getConversationMessages = async (req, res) => {
                     u.email as sender_email,
                     u.first_name as sender_first_name, 
                     u.last_name as sender_last_name,
-                    u.role as sender_role
+                    CASE
+                        WHEN m.is_system = TRUE THEN 'system'
+                        ELSE u.role
+                    END as sender_role
                 FROM messages m
-                JOIN users u ON m.sender_id = u.id
+                LEFT JOIN users u ON m.sender_id = u.id
                 WHERE m.conversation_id = ?
                 ORDER BY m.created_at ASC
             `, [conversationId]);
@@ -402,9 +406,101 @@ const sendMessage = async (req, res) => {
     }
 };
 
+/**
+ * Close a conversation as an admin
+ */
+const closeConversation = async (req, res) => {
+    const { conversationId } = req.params;
+    const adminUserId = req.user.id; // Assumes authenticateToken adds user info
+
+    logger.info(`Admin ${adminUserId} attempting to close conversation ${conversationId}`);
+
+    if (!req.user || req.user.role !== 'admin') {
+        logger.warn(`Unauthorized attempt to close conversation ${conversationId} by user ${adminUserId}`);
+        return res.status(403).json({ message: 'Unauthorized - Admin access required' });
+    }
+
+    if (!conversationId) {
+        return res.status(400).json({ message: 'Conversation ID is required' });
+    }
+
+    try {
+        // 1. Check if conversation exists and is open
+        const [conversation] = await db.query(
+            'SELECT * FROM conversations WHERE id = ?',
+            [conversationId]
+        );
+
+        if (!conversation.length) {
+            logger.warn(`Conversation not found: ${conversationId}`);
+            return res.status(404).json({ message: 'Conversation not found' });
+        }
+
+        if (conversation[0].status === 'closed') {
+            logger.info(`Conversation ${conversationId} is already closed.`);
+             // Return success if already closed
+            return res.status(200).json({ 
+                success: true, 
+                message: 'Conversation is already closed' 
+            });
+        }
+
+        // 2. Update conversation status to 'closed'
+        const [updateResult] = await db.query(
+            'UPDATE conversations SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status != ?',
+            ['closed', conversationId, 'closed'] // Add condition to prevent race conditions
+        );
+
+        if (updateResult.affectedRows === 0) {
+            // This could happen if status changed between SELECT and UPDATE
+            logger.warn(`Conversation ${conversationId} status could not be updated to closed (possibly already closed).`);
+            return res.status(409).json({ message: 'Conversation status may have changed. Please try again.' });
+        }
+        
+        logger.info(`Conversation ${conversationId} status updated to closed.`);
+
+        // 3. Insert system message indicating closure by admin
+        // Ensure the sender_id for system messages is consistently handled (using NULL here)
+        const systemMessageContent = "The administrative team has ended the chat";
+        const [messageResult] = await db.query(
+            'INSERT INTO messages (conversation_id, sender_id, content, is_system, created_at) VALUES (?, NULL, ?, TRUE, NOW())',
+            [conversationId, systemMessageContent]
+        );
+        
+        if (!messageResult.insertId) {
+             // This is unlikely if the update succeeded, but handle defensively
+             logger.error(`Failed to insert system close message for conversation ${conversationId} after status update.`);
+            // Consider the conversation closed, but notify about message failure
+             return res.status(500).json({ 
+                success: true, 
+                message: 'Conversation closed, but failed to send closure notification message.',
+                warning: 'System message insertion failed.'
+             });
+        }
+        
+        logger.info(`System closure message sent for conversation ${conversationId}, message ID: ${messageResult.insertId}`);
+        
+        res.status(200).json({ 
+            success: true, 
+            message: 'Conversation closed successfully', 
+            systemMessageId: messageResult.insertId 
+        });
+
+    } catch (error) {
+        logger.error(`Error closing conversation ${conversationId}: ${error.message}`, error);
+        // Check for specific DB errors if needed
+        if (error.code === 'ER_NO_REFERENCED_ROW_2') {
+             return res.status(404).json({ message: 'Conversation not found or related data missing.' });
+        }
+        res.status(500).json({ message: 'Error closing conversation' });
+    } 
+    // No finally block needed as we are not managing connection manually
+};
+
 module.exports = {
     getConversations,
     getConversationMessages,
     deleteConversation,
-    sendMessage
+    sendMessage,
+    closeConversation
 }; 

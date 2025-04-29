@@ -147,14 +147,14 @@ const HomePage = () => {
                             <Grid item xs={12} md={6}>
                                 <Box 
                                     component="img"
-                                    src="/modern-car.png" // Add a modern car image
+                                    src="/CarSharingHomepage.jpg"
                                     alt="Luxury car rental"
                                     sx={{
                                         width: '120%',
                                         maxWidth: 700,
                                         height: 'auto',
                                         display: { xs: 'none', md: 'block' },
-                                        transform: 'rotate(-5deg)',
+                                        
                                         filter: 'drop-shadow(0 20px 30px rgba(0,0,0,0.3))'
                                     }}
                                 />
@@ -167,16 +167,21 @@ const HomePage = () => {
             {/* Features Section */}
             <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
                 <Slide direction="up" in timeout={1000}>
-                    <Box>
+                    <Box sx={{ textAlign: 'center' }}>
                         <Typography 
                             variant="h2" 
                             align="center" 
                             gutterBottom
-                            sx={{ 
+                            sx={(theme) => ({
                                 fontWeight: 700,
                                 fontSize: { xs: '2rem', md: '2.5rem' },
-                                mb: 6
-                            }}
+                                mb: 6,
+                                backgroundColor: theme.palette.primary.main,
+                                color: theme.palette.common.white,
+                                padding: theme.spacing(1, 3),
+                                borderRadius: 2,
+                                display: 'inline-block'
+                            })}
                         >
                             The smarter way to rent a car
                         </Typography>

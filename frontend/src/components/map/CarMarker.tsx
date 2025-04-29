@@ -19,6 +19,9 @@ import {
 import ElectricCarIcon from '@mui/icons-material/ElectricCar';
 import LocalGasStationIcon from '@mui/icons-material/LocalGasStation';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import AirlineSeatReclineNormalIcon from '@mui/icons-material/AirlineSeatReclineNormal';
+import StarRateIcon from '@mui/icons-material/StarRate';
 import BookingDialog from '../bookings/BookingDialog';
 import { useNavigate } from 'react-router-dom';
 
@@ -50,6 +53,9 @@ interface CarMarkerProps {
         id: number;
         make: string;
         model: string;
+        year: number;
+        seats: number;
+        rating?: number;
         type: 'electric' | 'hybrid' | 'petrol';
         price_per_hour: number;
         location: [number, number];
@@ -90,7 +96,7 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
                     setUserMembership(null);
                 } else if (response.ok) {
                     const data = await response.json();
-                    setUserMembership(data.type);
+                    setUserMembership(data ? data.type : null);
                 }
             } catch (err) {
                 console.error('Error fetching membership:', err);
@@ -222,11 +228,36 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
                                 icon={car.type === 'electric' ? <ElectricCarIcon /> : 
                                      car.type === 'hybrid' ? <LocalGasStationIcon /> : 
                                      <DirectionsCarIcon />}
-                                label={car.type}
+                                label={car.type.charAt(0).toUpperCase() + car.type.slice(1)}
                                 size="small"
-                                color="primary"
-                                sx={{ mb: 2 }}
+                                variant="outlined"
+                                sx={{ mr: 1, mb: 1 }}
                             />
+                            <Chip
+                                icon={<CalendarTodayIcon fontSize="small" />}
+                                label={car.year}
+                                size="small"
+                                variant="outlined"
+                                sx={{ mr: 1, mb: 1 }}
+                            />
+                            <Chip
+                                icon={<AirlineSeatReclineNormalIcon fontSize="small" />}
+                                label={`${car.seats} Seats`}
+                                size="small"
+                                variant="outlined"
+                                sx={{ mr: 1, mb: 1 }}
+                            />
+                            {/* Add Rating Chip (only if rating exists and is a number) */}
+                            {typeof car.rating === 'number' && car.rating > 0 && (
+                                <Chip
+                                    icon={<StarRateIcon fontSize="small" />}
+                                    label={`${car.rating.toFixed(1)}`}
+                                    size="small"
+                                    variant="outlined"
+                                    color="warning"
+                                    sx={{ mb: 1 }}
+                                />
+                            )}
 
                             <Divider sx={{ my: 2 }} />
                             

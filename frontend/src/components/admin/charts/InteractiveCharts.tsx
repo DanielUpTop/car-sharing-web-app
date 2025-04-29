@@ -108,7 +108,7 @@ const InteractiveCharts = ({ data }: Props) => {
 
     return (
         <Paper sx={{ p: 3 }}>
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: 5 }}>
                 <Typography variant="h6" gutterBottom>
                     Trend Analysis
                 </Typography>

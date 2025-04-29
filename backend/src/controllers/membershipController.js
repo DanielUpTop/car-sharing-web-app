@@ -152,7 +152,7 @@ class MembershipController {
       const membership = await Membership.getUserMembership(userId);
       
       if (!membership) {
-        return res.status(404).json({ error: 'No active membership found for this user' });
+        return res.status(200).json(null);
       }
       
       return res.status(200).json(membership);

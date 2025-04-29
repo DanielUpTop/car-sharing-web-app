@@ -133,19 +133,25 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
             const data = await response.json();
             setMembership(data);
             
-            // Set discount percentage based on membership type
-            switch (data.type) {
-                case 'basic':
-                    setDiscountPercentage(5);
-                    break;
-                case 'premium':
-                    setDiscountPercentage(10);
-                    break;
-                case 'platinum':
-                    setDiscountPercentage(15);
-                    break;
-                default:
-                    setDiscountPercentage(0);
+            // Check if data is null before accessing type
+            if (data && data.type) {
+                // Set discount percentage based on membership type
+                switch (data.type) {
+                    case 'basic':
+                        setDiscountPercentage(5);
+                        break;
+                    case 'premium':
+                        setDiscountPercentage(10);
+                        break;
+                    case 'platinum':
+                        setDiscountPercentage(15);
+                        break;
+                    default:
+                        setDiscountPercentage(0);
+                }
+            } else {
+                // No membership or type found, ensure discount is 0
+                setDiscountPercentage(0);
             }
         } catch (err) {
             console.error('Error fetching membership:', err);

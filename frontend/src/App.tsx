@@ -5,6 +5,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers'
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
 import theme from './theme'
 import './App.css'
+import { Toaster } from 'react-hot-toast'
 
 // Components
 import HomePage from './components/home/HomePage'
@@ -47,6 +48,7 @@ function App() {
       <ThemeProvider theme={theme}>
         <LocalizationProvider dateAdapter={AdapterDateFns}>
           <AuthProvider>
+            <Toaster position="top-center" reverseOrder={false} />
             <Routes>
               {/* Public routes */}
               <Route path="/" element={<HomePage />} />

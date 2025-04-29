@@ -466,7 +466,11 @@ const SupportTickets: React.FC = () => {
       </AppBar>
       <Toolbar /> {/* For spacing below AppBar */}
       
-      <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
+      <Container maxWidth="xl" sx={{ mt: 2, mb: 8 }}>
+        {/* Add the main title here */}
+        <Typography variant="h4" gutterBottom sx={{ color: 'black', mb: 3 }}>
+          Support Tickets Management
+        </Typography>
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {error}
@@ -478,7 +482,7 @@ const SupportTickets: React.FC = () => {
           <Grid item xs={12} md={selectedTicket ? 5 : 12}>
             <Paper sx={{ p: 2, mb: 2 }}>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h5" display="flex" alignItems="center">
+                <Typography variant="h5" display="flex" alignItems="center" sx={{ color: 'black' }}>
                   <ConfirmationNumberIcon sx={{ mr: 1 }} />
                   Support Tickets
                 </Typography>

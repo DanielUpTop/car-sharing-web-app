@@ -342,7 +342,7 @@ const BookingManagement = () => {
 
     return (
         <Box sx={{ height: '100%', width: '100%', p: 2 }}>
-            <Typography variant="h4" gutterBottom>
+            <Typography variant="h4" gutterBottom color="black">
                 Booking Management
             </Typography>
             

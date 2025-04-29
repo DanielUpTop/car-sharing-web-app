@@ -282,7 +282,20 @@ const InsuranceView = () => {
 
             const bookings = await response.json();
             setAvailableBookings(bookings);
-            setOpenNewPolicy(true);
+
+            // Determine default policy state based on CURRENT membershipType
+            const defaultType = membershipType === null ? 'low' : 'basic';
+            const defaultAmount = membershipType === null ? '100' : '500';
+
+            // Set the policy form state right before opening the dialog
+            setPolicyForm({
+                booking_id: '', // Reset booking selection
+                coverage_type: defaultType,
+                coverage_amount: defaultAmount
+            });
+            
+            setOpenNewPolicy(true); // Open dialog AFTER setting state
+
         } catch (err) {
             console.error('Error fetching available bookings:', err);
             setError(err instanceof Error ? err.message : 'An error occurred while fetching available bookings');
@@ -585,7 +598,7 @@ const InsuranceView = () => {
                             </Typography>
                             <Typography variant="body2">
                                 Your membership allows for {membershipType === 'basic' ? 'basic' : membershipType === 'premium' ? 'enhanced' : 'premium'} insurance coverage 
-                                up to ${getMaxInsuranceCoverage(membershipType)}.
+                                up to £{getMaxInsuranceCoverage(membershipType)}.
                             </Typography>
                         </Alert>
                     ) : (
@@ -1163,9 +1176,10 @@ const InsuranceView = () => {
                                 label="Coverage Type"
                                 onChange={(e) => {
                                     const type = e.target.value as string;
-                                    let amount = '500';
+                                    let amount = '100'; // Default to low for non-member
                                     
-                                    // Set default amounts based on coverage type
+                                    // Set amounts based on coverage type
+                                    if (type === 'basic') amount = '500';
                                     if (type === 'standard') amount = '1000';
                                     if (type === 'premium') amount = '2000';
                                     
@@ -1176,14 +1190,23 @@ const InsuranceView = () => {
                                     });
                                 }}
                             >
-                                <MenuItem value="basic">Basic Coverage - Limited Protection</MenuItem>
-                                <MenuItem value="standard">Standard Coverage - Comprehensive Protection</MenuItem>
-                                <MenuItem value="premium">Premium Coverage - Maximum Protection</MenuItem>
+                                {membershipType === null ? (
+                                    // Only show Low for non-members
+                                    <MenuItem value="low">Low Coverage - £100 Limit</MenuItem>
+                                ) : (
+                                    // Show standard options for members
+                                    [
+                                        <MenuItem key="basic" value="basic">Basic Coverage - £500 Limit</MenuItem>,
+                                        <MenuItem key="standard" value="standard">Standard Coverage - £1000 Limit</MenuItem>,
+                                        <MenuItem key="premium" value="premium">Premium Coverage - £2000 Limit</MenuItem>
+                                    ]
+                                )}
                             </Select>
                             <FormHelperText>
-                                {policyForm.coverage_type === 'basic' && 'Basic liability and collision coverage'}
-                                {policyForm.coverage_type === 'standard' && 'Comprehensive coverage for most incidents'}
-                                {policyForm.coverage_type === 'premium' && 'Full protection with maximum benefits'}
+                                {policyForm.coverage_type === 'low' && 'Basic protection up to £100'}
+                                {policyForm.coverage_type === 'basic' && 'Basic liability and collision coverage up to £500'}
+                                {policyForm.coverage_type === 'standard' && 'Comprehensive coverage for most incidents up to £1000'}
+                                {policyForm.coverage_type === 'premium' && 'Full protection with maximum benefits up to £2000'}
                             </FormHelperText>
                         </FormControl>
                         
@@ -1193,14 +1216,11 @@ const InsuranceView = () => {
                             fullWidth
                             margin="normal"
                             value={policyForm.coverage_amount}
-                            onChange={(e) => setPolicyForm({
-                                ...policyForm,
-                                coverage_amount: e.target.value
-                            })}
+                            disabled // Make amount read-only, derived from type
                             InputProps={{
-                                startAdornment: <span style={{ marginRight: '8px' }}>$</span>,
+                                startAdornment: <span style={{ marginRight: '8px' }}>£</span>, // Use £ symbol
                             }}
-                            helperText="The maximum coverage amount for claims"
+                            helperText="The maximum coverage amount for claims (determined by type)"
                         />
                     </DialogContent>
                     <DialogActions sx={{ px: 3, pb: 2 }}>

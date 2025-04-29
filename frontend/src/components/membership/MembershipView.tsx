@@ -85,7 +85,8 @@ const fallbackMembershipLevels = {
             'No additional benefits',
             'Standard booking',
             'No discount on rentals',
-            'Standard customer support'
+            'Standard customer support',
+            '£100 Insurance coverage'
         ]
     },
     basic: {
@@ -462,6 +463,13 @@ const MembershipView = () => {
                     Your Membership
                 </Typography>
 
+                {membership?.status === 'cancelled' && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                        Your {membership.type} membership has been cancelled and will not renew.
+                        Your benefits remain active until {membership.end_date ? format(new Date(membership.end_date), 'PPP') : 'the end date'}.
+                    </Alert>
+                )}
+
                 {!membership ? (
                     <Box sx={{ textAlign: 'center', py: 3 }}>
                         <Typography variant="h6" color="textSecondary" gutterBottom>
@@ -643,15 +651,17 @@ const MembershipView = () => {
                                 <CardActions sx={{ p: 2, pt: 0 }}>
                                     <Button
                                         fullWidth
-                                        variant={tier.type === membership?.type ? "outlined" : "contained"}
+                                        variant={tier.type === membership?.type && membership?.status !== 'expired' ? "outlined" : "contained"}
                                         color={"primary"}
                                         disabled={
                                             (tier.type === membership?.type && membership?.status === 'active') ||
-                                            (tier.type === 'none' && !membership)
-                                            }
+                                            (tier.type === 'none' && (membership?.status === 'cancelled' || !membership))
+                                        }
                                         onClick={() => {
                                             if (tier.type === 'none') {
-                                                setShowCancelDialog(true);
+                                                if (membership?.status === 'active') {
+                                                    setShowCancelDialog(true);
+                                                }
                                             } else {
                                                 setSelectedType(tier.type as 'basic' | 'premium' | 'platinum');
                                                 setShowUpgradeDialog(true);
@@ -660,12 +670,14 @@ const MembershipView = () => {
                                     >
                                          {tier.type === 'none' && !membership
                                             ? 'Current Status'
+                                            : tier.type === 'none' && membership?.status === 'cancelled'
+                                            ? 'Cancelled'
+                                            : tier.type === 'none' && membership?.status === 'active'
+                                            ? 'Cancel Membership'
                                             : tier.type === membership?.type && membership?.status === 'active'
                                             ? 'Current Plan'
                                             : tier.type === membership?.type && membership?.status === 'cancelled'
                                             ? 'Reactivate'
-                                            : tier.type === 'none'
-                                            ? 'Cancel Membership'
                                             : membership
                                             ? 'Switch Plan'
                                             : 'Select Plan'}

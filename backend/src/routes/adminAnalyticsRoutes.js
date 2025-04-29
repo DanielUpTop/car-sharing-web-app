@@ -33,11 +33,11 @@ router.get('/analytics', async (req, res) => {
                 CurrentMonth.*,
                 PreviousMonth.*,
                 CASE 
-                    WHEN PreviousMonth.previous_revenue = 0 THEN 100
+                    WHEN PreviousMonth.previous_revenue = 0 THEN NULL
                     ELSE ROUND(((CurrentMonth.current_revenue - PreviousMonth.previous_revenue) / PreviousMonth.previous_revenue) * 100, 1)
                 END as revenue_growth,
                 CASE 
-                    WHEN PreviousMonth.previous_bookings = 0 THEN 100
+                    WHEN PreviousMonth.previous_bookings = 0 THEN NULL
                     ELSE ROUND(((CurrentMonth.current_bookings - PreviousMonth.previous_bookings) / PreviousMonth.previous_bookings) * 100, 1)
                 END as booking_growth
             FROM CurrentMonth, PreviousMonth
@@ -53,8 +53,8 @@ router.get('/analytics', async (req, res) => {
         `);
 
         // Add growth metrics to overview
-        overview.revenueGrowth = monthlyComparison.revenue_growth;
-        overview.bookingGrowth = monthlyComparison.booking_growth;
+        overview.revenueGrowth = monthlyComparison.revenue_growth === null ? 0 : monthlyComparison.revenue_growth;
+        overview.bookingGrowth = monthlyComparison.booking_growth === null ? 0 : monthlyComparison.booking_growth;
 
         // Get revenue by month for the current year
         const [revenueByMonth] = await db.query(`

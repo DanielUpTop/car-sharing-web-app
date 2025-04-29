@@ -124,7 +124,7 @@ const AdminDashboard = () => {
 
     return (
         <Box>
-            <Typography variant="h4" gutterBottom>
+            <Typography variant="h4" gutterBottom color="black">
                 Dashboard Overview
             </Typography>
 

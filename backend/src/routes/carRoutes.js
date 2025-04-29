@@ -58,9 +58,10 @@ router.get('/available', async (req, res) => {
         `;
         const [cars] = await db.query(query);
         
-        // Process cars to ensure address is properly set
+        // Process cars to ensure address is properly set and map image_url to image
         const processedCars = cars.map(car => ({
             ...car,
+            image: car.image_url, // Map image_url to image for frontend
             address: car.address || car.location || 'No location set for this vehicle',
             required_membership: car.required_membership // Include this in response
         }));

@@ -441,12 +441,6 @@ router.post('/conversations/:conversationId/rating', authenticateToken, async (r
             return res.status(403).json({ success: false, message: "Access denied" });
         }
         
-        // Store the rating
-        await db.query(
-            'UPDATE conversations SET rating = ?, rated_at = CURRENT_TIMESTAMP WHERE id = ?',
-            [rating, conversationId]
-        );
-        
         // Add a message about the rating (as system message with NULL sender)
         await db.query(
             'INSERT INTO messages (conversation_id, sender_id, content, is_system) VALUES (?, NULL, ?, TRUE)',

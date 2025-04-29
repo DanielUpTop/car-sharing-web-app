@@ -1399,4 +1399,25 @@ router.get('/membership-tiers-debug', async (req, res) => {
     }
 });
 
+// Delete a user
+router.delete('/users/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Optional: Check if user exists before deleting
+        const [user] = await db.query('SELECT id FROM users WHERE id = ?', [id]);
+        if (user.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        // You might want to prevent deleting admins, add check here if needed
+
+        await db.query('DELETE FROM users WHERE id = ?', [id]);
+        res.json({ message: 'User deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        // Provide more specific error if FK constraint fails, etc.
+        res.status(500).json({ message: 'Error deleting user' });
+    }
+});
+
 module.exports = router; 

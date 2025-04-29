@@ -25,7 +25,6 @@ import {
     GridColDef,
     GridRenderCellParams,
     GridRowParams,
-    GridValueGetterParams
 } from '@mui/x-data-grid';
 import {
     Edit as EditIcon,
@@ -194,7 +193,7 @@ const UserManagement = () => {
 
     const handleToggleStatus = async (user: User) => {
         try {
-            const newStatus = user.status === 'active' ? 'inactive' : 'active';
+            const newStatus = user.status === 'active' ? 'blocked' : 'active';
             
             const response = await fetch(`http://localhost:5001/api/admin/users/${user.id}/status`, {
                 method: 'PUT',
@@ -321,7 +320,7 @@ const UserManagement = () => {
     return (
         <Box>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-                <Typography variant="h4">User Management</Typography>
+                <Typography variant="h4" color="black">User Management</Typography>
                 <Button
                     variant="contained"
                     startIcon={<AddIcon />}

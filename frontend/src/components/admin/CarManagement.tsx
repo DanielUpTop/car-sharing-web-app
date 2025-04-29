@@ -193,7 +193,7 @@ const CarManagement = () => {
         setSnackbar(prev => ({ ...prev, open: false }));
     };
 
-    const columns: GridColDef[] = [
+    const columns: GridColDef<Car>[] = [
         { field: 'make', headerName: 'Make', flex: 1 },
         { field: 'model', headerName: 'Model', flex: 1 },
         { field: 'year', headerName: 'Year', width: 100 },
@@ -204,7 +204,7 @@ const CarManagement = () => {
             headerName: 'Price/Hour',
             width: 120,
             valueFormatter: (params) => {
-                const value = params.value ?? 0;
+                const value = (params.value as number) ?? 0;
                 return `£${Number(value).toFixed(2)}`;
             },
         },
@@ -239,7 +239,7 @@ const CarManagement = () => {
     return (
         <Box>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-                <Typography variant="h4">Car Management</Typography>
+                <Typography variant="h4" color="black">Car Management</Typography>
                 <Button
                     variant="contained"
                     startIcon={<AddIcon />}

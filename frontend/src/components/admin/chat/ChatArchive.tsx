@@ -290,7 +290,7 @@ const ChatArchive: React.FC = () => {
             overflow: 'hidden'
         }}>
             <Box sx={{ p: 3, flexShrink: 0 }}>
-                <Typography variant="h4" sx={{ mb: 3 }}>Live Chat Archive</Typography>
+                <Typography variant="h4" sx={{ mb: 3, color: 'black' }}>Live Chat Archive</Typography>
                 {error && (
                     <Alert severity="error" sx={{ mb: 3 }}>
                         {error}
@@ -519,47 +519,78 @@ const ChatArchive: React.FC = () => {
                                     ) : (
                                         messages.map((message) => {
                                             const isAdmin = message.sender_role === 'admin';
+                                            const isSystemMessage = message.sender_role === 'system' || message.sender_role === 'rating';
                                             
                                             return (
                                                 <Box
                                                     key={message.id}
                                                     sx={{
                                                         display: 'flex',
-                                                        flexDirection: 'column',
-                                                        alignItems: isAdmin ? 'flex-end' : 'flex-start',
-                                                        mb: 2
+                                                        justifyContent: isSystemMessage ? 'center' : (isAdmin ? 'flex-end' : 'flex-start'), 
+                                                        mb: 2 
                                                     }}
                                                 >
-                                                    <Typography 
-                                                        variant="subtitle2" 
-                                                        sx={{ 
-                                                            mb: 0.5,
-                                                            fontWeight: 'bold',
-                                                            color: isAdmin ? '#1976d2' : '#689f38',
-                                                        }}
-                                                    >
-                                                        {isAdmin ? 'You' : `${message.sender_first_name} ${message.sender_last_name}`}
-                                                    </Typography>
-                                                    
-                                                    <Paper
-                                                        elevation={1}
-                                                        sx={{
-                                                            p: 2,
-                                                            maxWidth: '70%',
-                                                            bgcolor: isAdmin ? '#1976d2' : '#f5f5f5',
-                                                            color: isAdmin ? 'white' : 'text.primary',
-                                                            borderRadius: 2
-                                                        }}
-                                                    >
-                                                        <Typography variant="body1">{message.content}</Typography>
-                                                    </Paper>
-                                                    <Typography 
-                                                        variant="caption" 
-                                                        color="text.secondary" 
-                                                        sx={{ mt: 0.5, fontSize: '0.7rem' }}
-                                                    >
-                                                        {format(new Date(message.created_at), 'h:mm a')}
-                                                    </Typography>
+                                                    {/* System Message Rendering - Matched to EnhancedChat.tsx */}
+                                                    {isSystemMessage ? (
+                                                        <Paper
+                                                            elevation={0} // Match user side
+                                                            sx={{
+                                                                p: 1.5, // Match user side
+                                                                backgroundColor: 'rgba(0, 0, 0, 0.04)', // Match user side
+                                                                borderRadius: 3, // Match user side
+                                                                maxWidth: '80%', // Match user side
+                                                                textAlign: 'center' // Ensure text is centered
+                                                            }}
+                                                        >
+                                                            <Typography 
+                                                                variant="body2" // Match user side
+                                                                color="text.secondary"
+                                                            >
+                                                                {message.content}
+                                                            </Typography>
+                                                        </Paper>
+                                                    ) : (
+                                                        // Regular User/Admin Message Rendering
+                                                        <Box sx={{ maxWidth: '70%' }}> 
+                                                            <Typography 
+                                                                variant="subtitle2" 
+                                                                sx={{ 
+                                                                    mb: 0.5,
+                                                                    fontWeight: 'bold',
+                                                                    color: isAdmin ? '#1976d2' : '#689f38',
+                                                                    textAlign: isAdmin ? 'right' : 'left' 
+                                                                }}
+                                                            >
+                                                                {isAdmin ? 'You' : `${message.sender_first_name || ''} ${message.sender_last_name || ''}`.trim() || 'User'} 
+                                                            </Typography>
+                                                            
+                                                            <Paper
+                                                                elevation={1}
+                                                                sx={{
+                                                                    p: 1.5, // Keep slightly larger padding for user/admin
+                                                                    bgcolor: isAdmin ? '#1976d2' : '#f5f5f5',
+                                                                    color: isAdmin ? 'white' : 'text.primary',
+                                                                    borderRadius: 2,
+                                                                    textAlign: 'left' 
+                                                                }}
+                                                            >
+                                                                <Typography variant="body1">{message.content}</Typography>
+                                                            </Paper>
+
+                                                            <Typography 
+                                                                variant="caption" 
+                                                                color="text.secondary" 
+                                                                sx={{ 
+                                                                    mt: 0.5, 
+                                                                    fontSize: '0.7rem',
+                                                                    display: 'block',
+                                                                    textAlign: isAdmin ? 'right' : 'left' 
+                                                                }}
+                                                            >
+                                                                {format(new Date(message.created_at), 'h:mm a')}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
                                                 </Box>
                                             );
                                         })

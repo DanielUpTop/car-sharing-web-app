@@ -8,11 +8,26 @@ const db = require('../config/dbConfig');
 const crypto = require('crypto');
 const authenticateToken = require('../middleware/authenticateToken');
 const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/jwtConfig');
+const { subYears, isValid, parseISO, isFuture } = require('date-fns'); // Add isFuture for expiry validation
 
 // Registration route
 router.post('/register', async (req, res) => {
     try {
-        const { first_name, last_name, email, password, phone_number, driving_license, verificationToken } = req.body;
+        const { 
+            first_name, 
+            last_name, 
+            email, 
+            password, 
+            phone_number, 
+            driving_license, 
+            date_of_birth, 
+            driving_license_expiry, // Added
+            address,                // Added
+            city,                   // Added
+            postcode,               // Added
+            driving_license_country, // Added
+            verificationToken 
+        } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findByEmail(email);
@@ -21,11 +36,35 @@ router.post('/register', async (req, res) => {
         }
 
         // Validate required fields
-        if (!first_name || !last_name || !email || !password || !phone_number || !driving_license || !verificationToken) {
-            return res.status(400).json({ message: 'All fields are required' });
+        const requiredFields = { first_name, last_name, email, password, phone_number, driving_license, date_of_birth, driving_license_expiry, address, city, postcode, driving_license_country, verificationToken };
+        for (const [key, value] of Object.entries(requiredFields)) {
+            if (!value) {
+                const fieldName = key === 'driving_license_country' ? 'Driving License Country' : key.replace('_', ' ');
+                return res.status(400).json({ message: `Field '${fieldName}' is required` });
+            }
         }
 
-        // Create new user with verification token from frontend
+        // Validate Date of Birth format and age (must be 20 or older)
+        const dob = parseISO(date_of_birth);
+        if (!isValid(dob)) {
+            return res.status(400).json({ message: 'Invalid Date of Birth format. Please use YYYY-MM-DD.' });
+        }
+        const today = new Date();
+        const twentyYearsAgo = subYears(today, 20);
+        if (dob > twentyYearsAgo) {
+            return res.status(400).json({ message: 'User must be at least 20 years old.' });
+        }
+
+        // Validate Driving License Expiry date format and ensure it's in the future
+        const expiryDate = parseISO(driving_license_expiry);
+        if (!isValid(expiryDate)) {
+            return res.status(400).json({ message: 'Invalid Driving License Expiry Date format. Please use YYYY-MM-DD.' });
+        }
+        if (!isFuture(expiryDate)) {
+            return res.status(400).json({ message: 'Driving License Expiry Date must be in the future.' });
+        }
+
+        // Create new user
         const userId = await User.create({
             first_name,
             last_name,
@@ -33,6 +72,12 @@ router.post('/register', async (req, res) => {
             password,
             phone_number,
             driving_license,
+            date_of_birth: dob, 
+            driving_license_expiry: expiryDate, // Pass parsed expiry date
+            address,
+            city,
+            postcode,
+            driving_license_country,
             verification_token: verificationToken,
             is_verified: false
         });
@@ -43,7 +88,6 @@ router.post('/register', async (req, res) => {
             console.log(`Created 'none' membership for new user ${userId}`);
         } catch (membershipError) {
             console.error(`Error creating default membership for user ${userId}:`, membershipError);
-            // Don't fail registration if membership creation fails
         }
 
         res.status(201).json({

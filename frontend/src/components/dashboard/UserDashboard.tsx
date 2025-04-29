@@ -23,7 +23,8 @@ import {
     TableRow,
     Chip,
     Button,
-    Rating
+    Rating,
+    Alert
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import {
@@ -448,49 +449,65 @@ const UserDashboard = () => {
                         </Typography>
                     </Box>
                 ) : (
-                    <Grid container spacing={2}>
-                        <Grid item xs={12} md={4}>
-                            <Box display="flex" alignItems="center" mb={1}>
-                                <Box
-                                    component="span"
-                                    sx={{
-                                        display: 'inline-block',
-                                        width: 16,
-                                        height: 16,
-                                        borderRadius: '50%',
-                                        backgroundColor: getMembershipColor(membership.type),
-                                        mr: 1
-                                    }}
-                                />
-                                <Typography variant="h6" fontWeight="bold">
-                                    {membership.type.charAt(0).toUpperCase() + membership.type.slice(1)} Member
+                    <>
+                        {/* Add cancellation message */} 
+                        {membership.status === 'cancelled' && (
+                            <Alert severity="warning" sx={{ mb: 2 }}>
+                                Your {membership.type} membership is cancelled and will not renew.
+                                Your benefits remain active until {membership.end_date ? format(new Date(membership.end_date), 'PPP') : 'the end date'}.
+                            </Alert>
+                        )}
+
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} md={4}>
+                                <Box display="flex" alignItems="center" mb={1}>
+                                    <Box
+                                        component="span"
+                                        sx={{
+                                            display: 'inline-block',
+                                            width: 16,
+                                            height: 16,
+                                            borderRadius: '50%',
+                                            backgroundColor: getMembershipColor(membership.type),
+                                            mr: 1
+                                        }}
+                                    />
+                                    <Typography variant="h6" fontWeight="bold" sx={{ mr: 1 }}>
+                                        {membership.type.charAt(0).toUpperCase() + membership.type.slice(1)} Membership
+                                    </Typography>
+                                    {/* Add Status Chip */}
+                                    <Chip 
+                                        label={membership.status.charAt(0).toUpperCase() + membership.status.slice(1)}
+                                        color={membership.status === 'active' ? 'success' : 'warning'}
+                                        size="small"
+                                    />
+                                </Box>
+                                <Typography variant="body2" color="text.secondary" gutterBottom>
+                                    {membership.status === 'active' ? 'Active since:' : 'Started:'} {format(new Date(membership.start_date), 'PPP')}
                                 </Typography>
-                            </Box>
-                            <Typography variant="body2" color="text.secondary" gutterBottom>
-                                Active since: {format(new Date(membership.start_date), 'PPP')}
-                            </Typography>
-                            {membership.end_date && (
-                                <Typography variant="body2" color="text.secondary">
-                                    Expires: {format(new Date(membership.end_date), 'PPP')}
+                                {membership.end_date && (
+                                    <Typography variant="body2" color="text.secondary">
+                                        {membership.status === 'cancelled' ? 'Benefits end:' : 'Expires:'} {format(new Date(membership.end_date), 'PPP')}
+                                    </Typography>
+                                )}
+                            </Grid>
+                            <Grid item xs={12} md={8}>
+                                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                    Your Benefits:
                                 </Typography>
-                            )}
-                        </Grid>
-                        <Grid item xs={12} md={8}>
-                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                                Your Benefits:
-                            </Typography>
-                            <Grid container spacing={1}>
-                                {getBenefitsList(membership.type).map((benefit, index) => (
-                                    <Grid item xs={12} md={6} key={index}>
-                                        <Box display="flex" alignItems="center">
-                                            <CompletedIcon color="success" fontSize="small" sx={{ mr: 1 }} />
-                                            <Typography variant="body2">{benefit}</Typography>
-                                        </Box>
-                                    </Grid>
-                                ))}
+                                <Grid container spacing={1}>
+                                    {getBenefitsList(membership.type).map((benefit, index) => (
+                                        <Grid item xs={12} md={6} key={index}>
+                                            <Box display="flex" alignItems="center">
+                                                <CompletedIcon color="success" fontSize="small" sx={{ mr: 1 }} />
+                                                <Typography variant="body2">{benefit}</Typography>
+                                            </Box>
+                                        </Grid>
+                                    ))}
+                                </Grid>
                             </Grid>
                         </Grid>
-                    </Grid>
+                    </>
                 )}
             </Paper>
 

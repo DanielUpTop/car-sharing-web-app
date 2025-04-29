@@ -24,7 +24,7 @@ export const INSURANCE_COVERAGE: Record<string, number> = {
     basic: 500,
     premium: 1000,
     platinum: 2000,
-    null: 0, // No coverage for non-members
+    null: 100, // Updated: Low coverage (£100) for non-members
 };
 
 // Priority level by tier (higher is better)

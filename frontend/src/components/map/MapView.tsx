@@ -153,6 +153,9 @@ interface Car {
     address: string;
     location: string;
     required_membership?: 'none' | 'basic' | 'premium' | 'platinum';
+    year: number;
+    seats: number;
+    rating: number;
 }
 
 interface GeocodingResult {
@@ -696,7 +699,10 @@ const MapView = () => {
                                         location: [car.latitude, car.longitude],
                                         image: car.image_url,
                                         address: car.address,
-                                        required_membership: car.required_membership
+                                        required_membership: car.required_membership,
+                                        year: car.year,
+                                        seats: car.seats,
+                                        rating: car.rating
                                     }}
                                 />
                             ))}

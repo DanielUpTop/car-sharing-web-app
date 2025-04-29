@@ -421,7 +421,7 @@ const AdminChat: React.FC = () => {
                     borderColor: 'divider', 
                     bgcolor: 'background.paper' 
                 }}>
-                    <Typography variant="h6">Active Conversations</Typography>
+                    <Typography variant="h6" color="black">Active Conversations</Typography>
                 </Box>
                 <List sx={{ 
                     height: 'calc(100vh - 64px)', 

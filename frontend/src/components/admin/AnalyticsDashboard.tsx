@@ -228,16 +228,28 @@ const AnalyticsDashboard = () => {
                                 £{data?.revenue.total.toFixed(2) || '0.00'}
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                                {(data?.revenue.growth || 0) >= 0 ? (
-                                    <TrendingUpIcon color="success" />
-                                ) : (
-                                    <TrendingDownIcon color="error" />
-                                )}
+                                {
+                                    typeof data?.revenue.growth === 'number' && data.revenue.growth !== 0 && (
+                                        data.revenue.growth > 0 ? (
+                                            <TrendingUpIcon color="success" />
+                                        ) : (
+                                            <TrendingDownIcon color="error" />
+                                        )
+                                    )
+                                }
                                 <Typography 
-                                    color={(data?.revenue.growth || 0) >= 0 ? 'success.main' : 'error.main'}
+                                    color={
+                                        typeof data?.revenue.growth === 'number' && data.revenue.growth > 0 ? 'success.main' : 
+                                        typeof data?.revenue.growth === 'number' && data.revenue.growth < 0 ? 'error.main' : 
+                                        'text.secondary' // Default color if 0 or not a number
+                                    }
                                     sx={{ ml: 1 }}
                                 >
-                                    {Math.abs(data?.revenue.growth || 0)}% from last period
+                                    {
+                                        typeof data?.revenue.growth === 'number' 
+                                            ? `${data.revenue.growth >= 0 ? '+' : ''}${data.revenue.growth.toFixed(1)}% vs last month`
+                                            : 'vs last month' // Or display '0.0% vs last month' or just '-'
+                                    }
                                 </Typography>
                             </Box>
                         </CardContent>
@@ -291,7 +303,7 @@ const AnalyticsDashboard = () => {
                 {/* Performance Insights */}
                 <Grid item xs={12}>
                     <Paper sx={{ p: 2 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
                             Performance Insights
                         </Typography>
                         <Grid container spacing={3}>

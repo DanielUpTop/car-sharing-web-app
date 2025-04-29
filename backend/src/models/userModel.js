@@ -10,14 +10,18 @@ class User {
                 last_name VARCHAR(50) NOT NULL,
                 email VARCHAR(100) UNIQUE NOT NULL,
                 password VARCHAR(255) NOT NULL,
-                phone_number VARCHAR(15),
+                phone_number VARCHAR(20),
                 driving_license VARCHAR(50),
+                date_of_birth DATE,
+                driving_license_expiry DATE,
+                driving_license_country VARCHAR(100),
+                address VARCHAR(255),
+                city VARCHAR(100),
+                postcode VARCHAR(20),
                 role ENUM('admin', 'rentee') DEFAULT 'rentee',
-                status ENUM('active', 'inactive', 'suspended') DEFAULT 'active',
+                status ENUM('active', 'blocked') DEFAULT 'active',
                 is_verified BOOLEAN DEFAULT FALSE,
                 verification_token VARCHAR(255),
-                membership_tier ENUM('STANDARD', 'PREMIUM', 'PLATINUM') DEFAULT 'STANDARD',
-                remaining_cancellations INT DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
@@ -25,14 +29,29 @@ class User {
         
         try {
             await db.query(query);
-            console.log('Users table created successfully');
+            console.log('Users table created or already exists successfully');
         } catch (error) {
             console.error('Error creating users table:', error);
             throw error;
         }
     }
 
-    static async create({ first_name, last_name, email, password, phone_number, driving_license, verification_token, is_verified = false }) {
+    static async create({ 
+        first_name, 
+        last_name, 
+        email, 
+        password, 
+        phone_number, 
+        driving_license, 
+        date_of_birth, 
+        driving_license_expiry,
+        address,
+        city,
+        postcode,
+        driving_license_country,
+        verification_token, 
+        is_verified = false 
+    }) {
         // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -44,10 +63,16 @@ class User {
                 password, 
                 phone_number, 
                 driving_license,
+                date_of_birth,
+                driving_license_expiry,
+                driving_license_country,
+                address,
+                city,
+                postcode,
                 verification_token,
                 is_verified
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         
         try {
@@ -58,6 +83,12 @@ class User {
                 hashedPassword,
                 phone_number,
                 driving_license,
+                date_of_birth,
+                driving_license_expiry,
+                driving_license_country,
+                address,
+                city,
+                postcode,
                 verification_token,
                 is_verified
             ]);
@@ -106,9 +137,26 @@ class User {
     }
 
     static async findById(userId) {
-        const query = 'SELECT * FROM users WHERE id = ?';
+        // Select all relevant fields, including the new ones
+        // Use template literal for multi-line query
+        const query = ` 
+            SELECT 
+                id, first_name, last_name, email, phone_number, 
+                driving_license, date_of_birth, driving_license_expiry, 
+                driving_license_country, address, city, postcode, role, status, is_verified, 
+                created_at, updated_at 
+            FROM users 
+            WHERE id = ?
+        `; 
         try {
             const [rows] = await db.query(query, [userId]);
+            // Convert date fields from DB format (if necessary, depends on DB driver)
+            if (rows[0]?.date_of_birth && typeof rows[0].date_of_birth === 'string') {
+                 rows[0].date_of_birth = new Date(rows[0].date_of_birth);
+            }
+             if (rows[0]?.driving_license_expiry && typeof rows[0].driving_license_expiry === 'string') {
+                 rows[0].driving_license_expiry = new Date(rows[0].driving_license_expiry);
+            }
             return rows[0];
         } catch (error) {
             console.error('Error finding user by ID:', error);
@@ -117,24 +165,54 @@ class User {
     }
 
     static async update(userId, userData) {
+        // Extract fields that can be updated via profile
+        const { 
+            first_name, 
+            last_name, 
+            email, 
+            phone_number, 
+            driving_license, 
+            date_of_birth, 
+            driving_license_expiry, 
+            address, 
+            city, 
+            postcode, 
+            driving_license_country 
+        } = userData;
+
+        // Construct the SET part of the query dynamically based on provided fields
+        // Note: This basic example updates all provided fields. 
+        // A more robust implementation might check which fields are actually provided in userData.
         const query = `
             UPDATE users 
             SET 
-                first_name = ?,
-                last_name = ?,
-                email = ?,
-                phone_number = ?,
-                driving_license = ?
+                first_name = ?, 
+                last_name = ?, 
+                email = ?, 
+                phone_number = ?, 
+                driving_license = ?, 
+                date_of_birth = ?, 
+                driving_license_expiry = ?, 
+                driving_license_country = ?, 
+                address = ?, 
+                city = ?, 
+                postcode = ?
             WHERE id = ?
         `;
 
         try {
             const [result] = await db.query(query, [
-                userData.first_name,
-                userData.last_name,
-                userData.email,
-                userData.phone_number,
-                userData.driving_license,
+                first_name,
+                last_name,
+                email, // Ensure email uniqueness is handled in the route
+                phone_number,
+                driving_license,
+                date_of_birth, // Assuming date object or valid string format
+                driving_license_expiry, // Assuming date object or valid string format
+                driving_license_country,
+                address,
+                city,
+                postcode,
                 userId
             ]);
             return result.affectedRows > 0;

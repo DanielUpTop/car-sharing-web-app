@@ -126,7 +126,10 @@ class Membership {
 
     static async getUserMembership(userId) {
         const [memberships] = await db.query(
-            'SELECT * FROM memberships WHERE user_id = ? AND status = "active"',
+            `SELECT * FROM memberships 
+             WHERE user_id = ? AND status IN ('active', 'cancelled')
+             ORDER BY updated_at DESC 
+             LIMIT 1`,
             [userId]
         );
         return memberships[0] || null;
@@ -142,11 +145,24 @@ class Membership {
 
     static async updateMembership(userId, type) {
         const benefits = await this.getDefaultBenefits(type);
+        
+        // Calculate new end date (1 month from now)
+        const newEndDate = new Date();
+        newEndDate.setMonth(newEndDate.getMonth() + 1);
+
         await db.query(
             `UPDATE memberships 
-             SET type = ?, benefits = ?, updated_at = CURRENT_TIMESTAMP 
-             WHERE user_id = ? AND status = "active"`,
-            [type, JSON.stringify(benefits), userId]
+             SET type = ?, 
+                 benefits = ?, 
+                 status = 'active', 
+                 auto_renew = true, 
+                 start_date = CURRENT_TIMESTAMP, 
+                 end_date = ?, 
+                 updated_at = CURRENT_TIMESTAMP 
+             WHERE user_id = ? AND status IN ('active', 'cancelled')
+             ORDER BY updated_at DESC 
+             LIMIT 1`,
+            [type, JSON.stringify(benefits), newEndDate, userId]
         );
     }
 
@@ -157,12 +173,12 @@ class Membership {
         );
     }
 
-    static async cancelMembership(userId) {
+    static async cancelMembership(membershipId) {
         await db.query(
             `UPDATE memberships 
              SET status = "cancelled", auto_renew = false, updated_at = CURRENT_TIMESTAMP 
-             WHERE user_id = ? AND status = "active"`,
-            [userId]
+             WHERE id = ? AND status = "active"`,
+            [membershipId]
         );
     }
 
