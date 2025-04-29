@@ -152,4 +152,165 @@
 .leaflet-top, 
 .leaflet-bottom {
     z-index: 800;
-} 
+}
+
+/* Main container for the two panels (List + Map) */
+.map-view-container {
+    display: flex;
+    flex-grow: 1; /* Take remaining height */
+    overflow: hidden; /* Prevent content spill */
+}
+
+/* Left Panel: Search + Car List */
+.car-list-panel {
+    width: 380px; /* Fixed width for the list panel */
+    min-width: 320px; /* Minimum width */
+    max-width: 450px; /* Maximum width */
+    height: 100%; /* Take full height of the parent flex container */
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #e0e0e0; /* Separator */
+    background-color: #f8f9fa; /* Light background */
+    overflow: hidden; /* Hide overflow */
+}
+
+/* Area holding the scrollable car list */
+.car-list-scroll {
+    flex-grow: 1; /* Allows this area to fill remaining space */
+    overflow-y: auto; /* Enable vertical scrolling */
+    padding: 8px;
+    background-color: #f8f9fa;
+}
+
+/* Right Panel: Map container */
+.map-container-panel {
+    flex-grow: 1; /* Map takes the rest of the width */
+    height: 100%; /* Take full height */
+    position: relative; /* Needed for absolute positioning of map controls */
+}
+
+/* Styling for Search Dropdown (inline version) */
+.search-dropdown-inline {
+    position: absolute;
+    top: 100%; /* Position below the search input */
+    left: 0;
+    width: 100%; /* Match parent width */
+    z-index: 1100; /* Above map but below modals maybe */
+    background-color: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    margin-top: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    color: black;
+}
+
+.search-dropdown-inline .MuiListItem-root {
+    padding: 10px 16px;
+    cursor: pointer;
+}
+
+.search-dropdown-inline .MuiListItem-root:hover {
+    background-color: #f0f0f0;
+}
+
+/* --- CarListItem Specific Styles (can be moved to CarListItem.css if preferred) --- */
+
+/* Ensures list items don't have extra padding messing alignment */
+.car-list-scroll .MuiList-root {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* Additional fine-tuning for the CarListItem component if needed */
+.car-list-scroll .MuiPaper-root {
+   /* background-color: #ffffff; */ /* Paper already handles background */
+   /* Add any specific styles for the Paper wrapper of CarListItem */
+}
+
+.car-list-scroll .MuiListItemAvatar-root {
+    /* Adjust avatar alignment or margin if needed */
+}
+
+.car-list-scroll .MuiAvatar-root {
+    /* Style the car image avatar */
+}
+
+.car-list-scroll .MuiTypography-subtitle1 {
+    /* Style for Make/Model */
+    font-size: 0.95rem; /* Slightly smaller */
+}
+
+.car-list-scroll .MuiTypography-body2 {
+    /* Style for Address */
+    font-size: 0.75rem; /* Smaller address text */
+    line-height: 1.3;
+}
+
+.car-list-scroll .MuiTypography-h6 {
+    /* Style for Price per Hour */
+    font-size: 1.1rem; 
+}
+
+.car-list-scroll .MuiButton-root {
+    /* Style for Select Car Button */
+    font-size: 0.8rem;
+    padding: 4px 12px; /* Adjust padding */
+}
+
+/* Responsive adjustments (example) */
+@media (max-width: 768px) {
+    .map-view-container {
+        flex-direction: column; /* Stack list and map */
+    }
+
+    .car-list-panel {
+        width: 100%; /* Take full width */
+        height: 40%; /* Fixed height for list */
+        max-height: 300px; /* Max height */
+        border-right: none;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .map-container-panel {
+        height: 60%; /* Map takes remaining height */
+    }
+}
+
+/* Old Styles (commented out or remove if not needed) */
+/* 
+.map-search-field .MuiInputBase-root {
+    background-color: white;
+    border-radius: 20px;
+}
+
+.map-search-field .MuiOutlinedInput-notchedOutline {
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+.loading-spinner {
+    color: #1976d2; 
+}
+
+.current-location-button {
+    background-color: #e3f2fd; 
+}
+
+.current-location-button:hover {
+    background-color: #bbdefb;
+}
+
+.location-notification .MuiAlert-message {
+    color: #014361;
+}
+
+.location-notification {
+    background-color: #e0f7fa;
+    color: #014361;
+}
+
+.map-container {
+     border-radius: 8px; 
+     overflow: hidden; 
+}
+*/ 

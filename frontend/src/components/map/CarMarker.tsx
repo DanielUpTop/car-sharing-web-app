@@ -48,29 +48,33 @@ const carIcon = L.divIcon({
     popupAnchor: [0, -36]
 });
 
-interface CarMarkerProps {
-    car: {
-        id: number;
-        make: string;
-        model: string;
-        year: number;
-        seats: number;
-        rating?: number;
-        type: 'electric' | 'hybrid' | 'petrol';
-        price_per_hour: number;
-        location: [number, number];
-        image: string;
-        address: string;
-        required_membership?: 'none' | 'basic' | 'premium' | 'platinum';
-    };
+// Define Car type expected by CarMarker (might differ slightly from MapView's)
+interface CarForMarker {
+    id: number;
+    make: string;
+    model: string;
+    year: number;
+    seats: number;
+    rating?: number;
+    type: 'electric' | 'hybrid' | 'petrol';
+    price_per_hour: number; 
+    location: [number, number];
+    image: string; 
+    address: string;
+    required_membership?: string;
 }
 
-const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
+interface CarMarkerProps {
+    car: CarForMarker; // Use the defined type
+    // Update handler prop to accept the car object
+    onOpenBooking: (car: CarForMarker) => void; 
+}
+
+const CarMarker: React.FC<CarMarkerProps> = ({ car, onOpenBooking }) => {
     const [openBooking, setOpenBooking] = React.useState(false);
     const navigate = useNavigate();
     const [userMembership, setUserMembership] = useState<string | null>(null);
     const [membershipLoading, setMembershipLoading] = useState(true);
-    const [showMembershipMessage, setShowMembershipMessage] = useState(false);
 
     // Fetch user's membership on component mount
     useEffect(() => {
@@ -109,32 +113,6 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
         fetchMembership();
     }, []);
 
-    const handleOpenBooking = () => {
-        if (isMembershipSufficient()) {
-            setOpenBooking(true);
-        } else {
-            // Show membership message instead of redirecting
-            setShowMembershipMessage(true);
-        }
-    };
-
-    const handleCloseBooking = () => {
-        setOpenBooking(false);
-    };
-
-    const handleCloseMembershipMessage = () => {
-        setShowMembershipMessage(false);
-    };
-
-    const navigateToMembership = () => {
-        console.log('Navigating to membership page');
-        handleCloseMembershipMessage(); // Close the dialog first
-        // Navigate with a small delay to ensure UI updates properly
-        setTimeout(() => {
-            navigate('/dashboard/membership');
-        }, 100);
-    };
-
     // Check if user meets membership requirements
     const isMembershipSufficient = () => {
         if (!car.required_membership || car.required_membership === 'none') {
@@ -168,12 +146,35 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
     // Get button text based on membership status
     const getButtonText = () => {
         if (membershipLoading) return 'Loading...';
-        
         if (!isMembershipSufficient()) {
-            return `Requires ${car.required_membership}`;
+            // Capitalize the requirement for display
+            const requirement = car.required_membership ? 
+                                car.required_membership.charAt(0).toUpperCase() + car.required_membership.slice(1) :
+                                'Basic'; // Should not happen if logic is correct
+            return `Requires ${requirement}`;
         }
-        
         return 'Select car';
+    };
+
+    // Determine button color based on sufficiency and requirement
+    const determineButtonColor = (): "inherit" | "primary" | "secondary" | "success" | "error" | "info" | "warning" => {
+        if (isMembershipSufficient()) {
+            return 'primary';
+        }
+        // If insufficient:
+        switch (car.required_membership) {
+            case 'platinum':
+                return 'warning'; // Gold/Orange
+            case 'premium':
+                return 'info';    // Light Blue
+            default: // Includes 'basic' or undefined/none (should default to sufficient)
+                return 'primary'; // Default blue if insufficient for basic (or error)
+        }
+    };
+
+    // Renamed handler
+    const handleSelectCarClick = () => {
+       onOpenBooking(car); 
     };
 
     return (
@@ -261,11 +262,7 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
 
                             <Divider sx={{ my: 2 }} />
                             
-                            <Box sx={{ 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                alignItems: 'center'
-                            }}>
+                            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Box>
                                     <Typography variant="caption" color="text.secondary">
                                         Starting at
@@ -274,84 +271,27 @@ const CarMarker: React.FC<CarMarkerProps> = ({ car }) => {
                                         £{Number(car.price_per_hour).toFixed(2)}/hr
                                     </Typography>
                                 </Box>
-                                <Tooltip title={!isMembershipSufficient() ? `Upgrade to ${car.required_membership} membership to book this car` : ""}>
-                                    <span>
-                                        <Button 
-                                            variant="contained" 
-                                            color={!isMembershipSufficient() ? "warning" : "primary"}
-                                            onClick={handleOpenBooking}
-                                            sx={{ 
-                                                textTransform: 'none',
-                                                fontWeight: 'bold',
-                                                px: 3
-                                            }}
-                                        >
-                                            {getButtonText()}
-                                        </Button>
-                                    </span>
-                                </Tooltip>
+                                {/* Removed Tooltip as membership dialog handled by MapView */}                               
+                                <Button 
+                                    variant="contained" 
+                                    size="small"
+                                    onClick={handleSelectCarClick} 
+                                    disabled={membershipLoading} 
+                                    // Use the new function to set color
+                                    color={determineButtonColor()} 
+                                    sx={{ 
+                                        textTransform: 'none',
+                                        fontWeight: 'bold',
+                                        px: 2
+                                    }}
+                                >
+                                    {getButtonText()} 
+                                </Button>
                             </Box>
                         </Box>
                     </Paper>
                 </Popup>
             </Marker>
-
-            <BookingDialog
-                open={openBooking}
-                onClose={handleCloseBooking}
-                car={{
-                    id: car.id,
-                    make: car.make,
-                    model: car.model,
-                    type: car.type,
-                    pricePerHour: Number(car.price_per_hour),
-                    image: car.image,
-                    address: car.address,
-                    required_membership: car.required_membership
-                }}
-                onBookingComplete={() => navigate('/dashboard/bookings')}
-            />
-
-            {/* Membership Requirement Dialog */}
-            <Dialog 
-                open={showMembershipMessage} 
-                onClose={handleCloseMembershipMessage}
-                PaperProps={{
-                    sx: { borderRadius: 2, maxWidth: 500 }
-                }}
-            >
-                <DialogTitle sx={{ pt: 3, pb: 1 }}>
-                    <Typography variant="h5" fontWeight="bold" color="warning.main">
-                        Membership Required
-                    </Typography>
-                </DialogTitle>
-                <DialogContent>
-                    <Alert severity="warning" sx={{ mb: 2 }}>
-                        This vehicle requires a {car.required_membership} membership.
-                    </Alert>
-                    <Typography variant="body1" paragraph>
-                        To book the {car.make} {car.model}, you need to upgrade your membership to {car.required_membership} or higher.
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 2 }}>
-                        {userMembership ? 
-                            `Your current membership level (${userMembership}) doesn't meet the requirement.` : 
-                            "You currently don't have an active membership."}
-                    </Typography>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 3 }}>
-                    <Button onClick={handleCloseMembershipMessage} variant="outlined">
-                        Close
-                    </Button>
-                    <Button 
-                        onClick={navigateToMembership} 
-                        variant="contained" 
-                        color="warning"
-                        sx={{ fontWeight: 'bold' }}
-                    >
-                        View Bookings
-                    </Button>
-                </DialogActions>
-            </Dialog>
         </>
     );
 };

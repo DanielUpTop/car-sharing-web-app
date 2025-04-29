@@ -46,17 +46,14 @@ router.get('/available', async (req, res) => {
                    c.location
             FROM cars c
             WHERE c.availability_status = 'available'
-            AND c.id NOT IN (
-                SELECT car_id 
-                FROM bookings 
-                WHERE status IN ('pending', 'confirmed')
-                AND (
-                    (NOW() BETWEEN start_date AND end_date) OR
-                    (start_date > NOW() AND start_date < DATE_ADD(NOW(), INTERVAL 7 DAY))
-                )
-            )
         `;
+        console.log("Executing query:", query); // Log the query being run
         const [cars] = await db.query(query);
+
+        // --- Add detailed logging here ---
+        console.log("Raw result from db.query:", cars); 
+        console.log(`Number of cars fetched directly from DB: ${cars ? cars.length : 'undefined/null'}`);
+        // --- End of detailed logging ---
         
         // Process cars to ensure address is properly set and map image_url to image
         const processedCars = cars.map(car => ({

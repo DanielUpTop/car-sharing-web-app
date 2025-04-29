@@ -25,6 +25,7 @@ import HelpCenter from './components/help/HelpCenter'
 import EnhancedChat from './components/chat/EnhancedChat'
 import AdminChat from './components/admin/AdminChat'
 import PaymentCompletion from './components/payments/PaymentCompletion'
+import CarDetailView from './components/cars/CarDetailView'
 
 // Admin components
 import AdminLayout from './components/admin/AdminLayout'
@@ -73,6 +74,16 @@ function App() {
                   </Routes>
                 </ProtectedRoute>
               } />
+
+              {/* Add specific car detail route - PROTECTED */}
+              <Route 
+                  path="/cars/:id" 
+                  element={
+                      <ProtectedRoute>
+                          <CarDetailView />
+                      </ProtectedRoute>
+                  }
+              />
 
               {/* Admin routes */}
               <Route path="/admin" element={

@@ -669,6 +669,39 @@ Updated SQL schema for better data relationships
 - Fixed issue where switching membership plans did not update the user's current membership by correcting the API endpoint call in `MembershipView.tsx` to use `/api/memberships/upgrade`.
 - Resolved a CSS `z-index` issue where the date picker component was appearing behind the booking modal dialog.
 
+### 29th April, 2024
+- **Admin Panel UI/UX & Functionality Fixes:** Focused on resolving display issues and broken actions in the Admin panel.
+    - **Live Chat Archive:**
+        - **Problem:** System messages (auto-replies, ratings) were incorrectly displayed as admin messages ("null null").
+        - **Investigation:** Identified `ChatArchive.tsx` and `EnhancedChat.tsx` logic difference. Found backend (`adminChatController.js`) SQL query didn't correctly assign `sender_role` based on `is_system` flag.
+        - **Fixes:**
+            - Modified backend SQL in `adminChatController.js` to use `CASE` statement for `sender_role` based on `is_system`.
+            - Updated `ChatArchive.tsx` to hide sender/timestamp for system messages and apply styling (centering, background, padding) matching the user-side chat.
+    - **Analytics Dashboard (`Analytics.tsx`):**
+        - **Problem 1:** "Total Revenue" card showed `+null%`.
+        - **Problem 2:** Charts/legends were cut off or poorly spaced.
+        - **Investigation (Problem 1):** Found frontend `StatCard` in `Analytics.tsx` lacked robust checks. Identified potential backend SQL division-by-zero in `adminAnalyticsRoutes.js` when calculating growth with zero previous revenue.
+        - **Fixes (Problem 1):**
+            - Modified backend SQL to return `NULL` for growth on division by zero.
+            - Updated backend Node.js logic to convert `NULL` growth to `0`.
+            - Modified frontend `StatCard` usage in `Analytics.tsx` to check `typeof === 'number'` for growth values before formatting.
+        - **Fixes (Problem 2 - Spacing/Cutoff):**
+            - Added overall padding and adjusted Grid spacing in `Analytics.tsx`.
+            - Increased internal padding in chart `Paper` components.
+            - Added margins below titles ("Analytics Dashboard", "Popular Cars Performance").
+            - Added margin-top to `subtext` in `StatCard`.
+            - Increased chart container `height` to `500`.
+            - Moved chart `Legend`s to `verticalAlign="top"`.
+            - Adjusted internal chart `margin` props (bottom, left) to prevent label cutoff.
+    - **User Management (`UserManagement.tsx`):**
+        - **Problem:** Edit, Block/Unblock, and Delete action buttons were non-functional.
+        - **Investigation:** Found frontend sent wrong status value ('inactive' vs 'blocked'). Checked backend `adminRoutes.js` and confirmed `PUT /users/:id/status` existed but `DELETE /users/:id` was missing.
+        - **Fixes:**
+            - Corrected frontend `handleToggleStatus` to send `'blocked'`.
+            - Implemented the missing `DELETE /api/admin/users/:id` route handler in `backend/src/routes/adminRoutes.js`
+      - **New Map Style Implementation :**
+        - Implemented a new map style and adjustments to make it more professional and UX friendly. 
+        - Integrated membership requirement checks directly into the 'Select car' button handlers for both the map markers and the list view. The buttons now dynamically change color (blue, orange, or light blue) and text ('Select car' or 'Requires [Membership]') based on user membership sufficiency, while remaining clickable. Clicking triggers either the booking dialog or a 'Membership Required' dialog managed centrally in MapView. Additionally, adjusted the layout of the car list items to improve readability, allowing text like car names and addresses to wrap and preventing elements from appearing squashed.
 
 ## Notes
 - Regular code reviews and pair programming for critical features
