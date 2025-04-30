@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Dialog,
     DialogTitle,
@@ -17,13 +17,15 @@ import {
     Grid,
     Divider,
     Chip,
-    Tooltip
+    Tooltip,
+    TextField,
+    CircularProgress
 } from '@mui/material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DateTimeValidationError } from '@mui/x-date-pickers';
-import { differenceInDays, format } from 'date-fns';
+import { differenceInDays, format, differenceInHours } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import MuiAlert from '@mui/material/Alert';
 import PaymentProvider from '../payments/PaymentProvider';
@@ -68,15 +70,15 @@ interface Car {
 }
 
 interface BookingDialogProps {
+    car: Car;
     open: boolean;
     onClose: () => void;
-    car: Car;
-    onBookingComplete: () => void;
+    onBookingComplete: (bookedCarId: number) => void;
 }
 
 const steps = ['Select Dates', 'Review & Pay'];
 
-const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogProps) => {
+const BookingDialog: React.FC<BookingDialogProps> = ({ car, open, onClose, onBookingComplete }) => {
     const navigate = useNavigate();
     const [activeStep, setActiveStep] = useState(0);
     const [startDate, setStartDate] = useState<Date | null>(null);
@@ -91,6 +93,12 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
     const [originalPrice, setOriginalPrice] = useState<number>(0);
     const [discountedPrice, setDiscountedPrice] = useState<number>(0);
     const [discountPercentage, setDiscountPercentage] = useState<number>(0);
+    const [totalPrice, setTotalPrice] = useState<number>(0);
+    const [bookingId, setBookingId] = useState<number | null>(null);
+
+    // State for Snackbar
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
 
     useEffect(() => {
         if (user) {
@@ -292,6 +300,14 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                 const data = response.data;
                 console.log('Payment intent created successfully');
                 setClientSecret(data.clientSecret);
+                if (data.bookingId) {
+                    setBookingId(data.bookingId); 
+                    console.log('Stored bookingId:', data.bookingId);
+                } else {
+                    console.error('Booking ID not received from backend!');
+                    setError('Failed to get booking ID from server.');
+                    return; 
+                }
                 setActiveStep(1);
             } catch (err) {
                 console.error('Payment intent creation error:', err);
@@ -308,68 +324,18 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
     };
 
     const handlePaymentSuccess = async (paymentIntentId: string) => {
-        console.log('[handlePaymentSuccess] Payment confirmed by Stripe. PaymentIntent ID:', paymentIntentId);
-        try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                console.error('[handlePaymentSuccess] No token found after payment success.');
-                throw new Error('No authentication token found');
-            }
-            console.log('[handlePaymentSuccess] Token found.');
+        console.log('BookingDialog: handlePaymentSuccess triggered! Intent ID:', paymentIntentId, 'Booking ID:', bookingId);
+        setLoading(false);
+        setError('');
+        setShowSuccess(true);
+        setSnackbarMessage('Booking Successful! Redirecting to My Bookings...');
+        setSnackbarOpen(true);
 
-            if (!startDate || !endDate) {
-                console.error('[handlePaymentSuccess] Missing start/end dates.');
-                throw new Error('Start and end dates are required');
-            }
-            console.log('[handlePaymentSuccess] Dates verified.');
-
-            const formattedStartDate = formatDateForMySQL(startDate);
-            const formattedEndDate = formatDateForMySQL(endDate);
-            const finalPrice = Number(calculateTotalPrice().toFixed(2));
-
-            const bookingData = {
-                car_id: car.id,
-                start_date: formattedStartDate,
-                end_date: formattedEndDate,
-                total_price: finalPrice,
-                payment_intent_id: paymentIntentId,
-                membership_discount: membership && discountPercentage > 0 ? {
-                    membership_type: membership.type,
-                    original_price: originalPrice,
-                    discount_percentage: discountPercentage,
-                    discount_amount: originalPrice - finalPrice
-                } : null
-            };
-            console.log('[handlePaymentSuccess] Preparing to POST booking data:', bookingData);
-
-            // Use api middleware instead of fetch to prevent redirection issues
-            const response = await api.post('/api/bookings', bookingData);
-            console.log('[handlePaymentSuccess] POST /api/bookings response status:', response.status);
-
-            const bookingResponse = response.data;
-            console.log('[handlePaymentSuccess] Booking created successfully:', bookingResponse);
-
-            // Remove email sending code - emails should only be sent after admin approval
-            // The admin will handle sending confirmation emails after they approve the booking
-
-            // Proceed even if email fails
-            setShowSuccess(true);
-            console.log('[handlePaymentSuccess] Set showSuccess=true. Calling onBookingComplete...');
-            onBookingComplete(); // <-- Navigate first
-            console.log('[handlePaymentSuccess] Called onBookingComplete. Closing dialog...');
-            onClose(); // <-- Close dialog after navigation attempt
-
-        } catch (err) {
-            console.error('[handlePaymentSuccess] START CATCH BLOCK. Error caught:', err);
-            const errorMessage = err instanceof Error ? err.message : 'Failed to finalize booking after payment';
-            console.log('[handlePaymentSuccess] Setting error state:', errorMessage);
-            setError(errorMessage);
-            
-            // Don't redirect to login even for auth errors - just show the error
-            console.error('[handlePaymentSuccess] Error during booking save:', errorMessage);
-            
-             console.log('[handlePaymentSuccess] END CATCH BLOCK.');
-        }
+        setTimeout(() => {
+            onBookingComplete(car.id);
+            onClose();
+            navigate('/dashboard/bookings');
+        }, 3000);
     };
 
     const isMembershipSufficient = () => {
@@ -388,6 +354,12 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
         // which means they can book basic cars but not premium/platinum
         const membershipType = membership ? membership.type : 'basic';
         const requiredType = car.required_membership as keyof typeof membershipLevels;
+        
+        // Ensure requiredType is a valid key before accessing
+        if (!(requiredType in membershipLevels)) {
+            console.warn(`Invalid required_membership value: ${requiredType}`);
+            return false; // Or handle as appropriate, maybe allow booking?
+        }
         
         return membershipLevels[membershipType as keyof typeof membershipLevels] >= membershipLevels[requiredType];
     };
@@ -813,14 +785,12 @@ const BookingDialog = ({ open, onClose, car, onBookingComplete }: BookingDialogP
                 </DialogActions>
             </StyledDialog>
             <Snackbar
-                open={showSuccess}
-                autoHideDuration={2000}
-                onClose={() => setShowSuccess(false)}
-            >
-                <MuiAlert severity="success" elevation={6} variant="filled">
-                    Booking created successfully!
-                </MuiAlert>
-            </Snackbar>
+                open={snackbarOpen}
+                autoHideDuration={3000}
+                onClose={() => setSnackbarOpen(false)}
+                message={snackbarMessage}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            />
         </>
     );
 };

@@ -39,15 +39,26 @@ router.get('/available', async (req, res) => {
 
         console.log('User membership level (informational only):', userMembership);
 
-        // Use a direct approach to exclude cars with pending or confirmed bookings
+        // Corrected query to exclude cars with active bookings
+        // Simplified Query: Rely solely on availability_status
         const query = `
             SELECT c.*, 
                    c.address,
                    c.location
             FROM cars c
             WHERE c.availability_status = 'available'
+            /* Removed NOT EXISTS clause:
+            AND NOT EXISTS (
+                SELECT 1
+                FROM bookings b
+                WHERE b.car_id = c.id
+                AND b.status IN ('pending', 'confirmed')
+                -- Optional: Add time constraints here if needed
+                -- e.g., AND b.end_date > NOW()
+            )
+            */
         `;
-        console.log("Executing query:", query); // Log the query being run
+        console.log("Executing simplified available cars query:", query); 
         const [cars] = await db.query(query);
 
         // --- Add detailed logging here ---

@@ -37,9 +37,9 @@ const PaymentCompletion = () => {
                     case 'succeeded':
                         setStatus('success');
                         setMessage('Payment successful! Redirecting to your bookings...');
-                        // Redirect to bookings page after 2 seconds
+                        // Redirect to membership page after 2 seconds
                         setTimeout(() => {
-                            navigate('/bookings');
+                            navigate('/dashboard/membership');
                         }, 2000);
                         break;
                     case 'processing':

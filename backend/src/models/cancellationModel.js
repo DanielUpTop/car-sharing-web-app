@@ -1,7 +1,8 @@
-const connection = require('../config/db');
+// Use dbConfig to get the pool object
+const db = require('../config/dbConfig');
+// const connection = require('../config/db'); 
 const Membership = require('./membershipModel');
 const MembershipUtils = require('../utils/membershipUtils');
-const db = require('../config/database');
 
 class Cancellation {
     /**
@@ -24,7 +25,8 @@ class Cancellation {
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         `;
-        return connection.query(sql);
+        // Use global pool (db)
+        return db.query(sql);
     }
 
     /**
@@ -37,6 +39,7 @@ class Cancellation {
             const query = 'INSERT INTO cancellations SET ?';
             cancellationData.created_at = new Date();
             
+            // Use global pool (db)
             db.query(query, cancellationData, (err, result) => {
                 if (err) {
                     console.error('Error creating cancellation record:', err);
@@ -73,6 +76,7 @@ class Cancellation {
                 query += dateCondition;
             }
             
+            // Use global pool (db)
             db.query(query, queryParams, (err, results) => {
                 if (err) {
                     console.error('Error fetching user cancellations:', err);
@@ -104,6 +108,7 @@ class Cancellation {
             
             const query = `SELECT COUNT(*) as count FROM cancellations WHERE user_id = ? AND ${dateCondition}`;
             
+            // Use global pool (db)
             db.query(query, [userId], (err, results) => {
                 if (err) {
                     console.error('Error counting cancellations:', err);
@@ -123,6 +128,7 @@ class Cancellation {
         return new Promise((resolve, reject) => {
             const query = 'SELECT is_free FROM cancellations WHERE id = ?';
             
+            // Use global pool (db)
             db.query(query, [cancellationId], (err, results) => {
                 if (err) {
                     console.error('Error checking if cancellation is free:', err);
@@ -147,6 +153,7 @@ class Cancellation {
         return new Promise((resolve, reject) => {
             const query = 'UPDATE cancellations SET is_free = 1 WHERE id = ?';
             
+            // Use global pool (db)
             db.query(query, [cancellationId], (err, result) => {
                 if (err) {
                     console.error('Error marking cancellation as free:', err);
@@ -167,7 +174,8 @@ class Cancellation {
             SELECT * FROM cancellations
             WHERE booking_id = ?
         `;
-        return connection.query(sql, [bookingId])
+        // Use global pool (db)
+        return db.query(sql, [bookingId])
             .then(results => results[0] || null);
     }
 
@@ -186,7 +194,8 @@ class Cancellation {
             AND is_free = 1
             AND cancelled_at BETWEEN ? AND ?
         `;
-        return connection.query(sql, [userId, startDate, endDate])
+        // Use global pool (db)
+        return db.query(sql, [userId, startDate, endDate])
             .then(results => results[0].count || 0);
     }
 
@@ -202,7 +211,8 @@ class Cancellation {
                 SUM(refund_amount) as total_refunds
             FROM cancellations
         `;
-        return connection.query(sql)
+        // Use global pool (db)
+        return db.query(sql)
             .then(results => results[0] || { total_cancellations: 0, free_cancellations: 0, total_refunds: 0 });
     }
 
@@ -214,21 +224,45 @@ class Cancellation {
     static async checkEligibility(userId) {
         // Get user's membership
         const membership = await Membership.getUserMembership(userId);
-        const allowedCancellations = MembershipUtils.getFreeCancellations(membership);
         
-        // Get current month in YYYY-MM format
+        // Determine allowed cancellations based on membership type
+        let allowedCancellations = 0; // Default for non-members or basic
+        const membershipType = membership ? membership.type : 'none';
+        
+        // Define limits here (matching MEMBERSHIP_TIERS logic implicitly)
+        switch (membershipType) {
+            case 'basic': // Assuming basic might have 1 free?
+                 allowedCancellations = 1; // Adjust if basic has 0
+                 break;
+            case 'premium':
+                allowedCancellations = 3; // Assuming 3 for premium
+                break;
+            case 'platinum':
+                allowedCancellations = 5; // Assuming 5 for platinum
+                break;
+            // 'none' or other types default to 0
+        }
+        
+        console.log(`[Cancel Eligibility Check] User ${userId}, Membership: ${membershipType}, Allowed: ${allowedCancellations}`);
+
+        // Get current month start and today
         const today = new Date();
-        const monthYear = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-        
-        // Count user's free cancellations this month
-        const [result] = await connection.query(
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+        // Count user's free cancellations this month using correct arguments
+        console.log(`[Cancel Eligibility Check] Querying cancellations between ${startOfMonth.toISOString()} and ${today.toISOString()}`);
+        // Use global pool (db)
+        const [result] = await db.query(
             `SELECT COUNT(*) as count FROM cancellations 
              WHERE user_id = ? AND cancelled_at BETWEEN ? AND ? AND is_free = true`,
-            [userId, monthYear, today]
+            // Pass DATE objects directly, MySQL driver handles formatting
+            [userId, startOfMonth, today] 
         );
         
         const usedCancellations = result[0].count || 0;
+        console.log(`[Cancel Eligibility Check] Used cancellations this month: ${usedCancellations}`);
         const remainingCancellations = Math.max(0, allowedCancellations - usedCancellations);
+        console.log(`[Cancel Eligibility Check] Remaining free cancellations: ${remainingCancellations}`);
         
         return {
             eligible: remainingCancellations > 0,
@@ -236,12 +270,13 @@ class Cancellation {
                 ? `You have ${remainingCancellations} free cancellation(s) remaining this month.`
                 : `You have used all your free cancellations for this month.`,
             remainingCancellations,
-            membership
+            membership // Pass the fetched membership object back
         };
     }
 
     /**
-     * Record a cancellation
+     * Record a cancellation - Accepts connection object for transactions
+     * @param {Object} connection - MySQL connection object from pool
      * @param {number} userId - User ID
      * @param {number} bookingId - Booking ID
      * @param {boolean} isFree - Whether this is a free cancellation
@@ -249,9 +284,10 @@ class Cancellation {
      * @param {number} refundAmount - Refund amount
      * @returns {Promise<number>} - ID of the new cancellation record
      */
-    static async recordCancellation(userId, bookingId, isFree = false, reason = '', refundAmount = 0.00) {
+    static async recordCancellation(connection, userId, bookingId, isFree = false, reason = '', refundAmount = 0.00) {
         const today = new Date();
         
+        // Use the passed connection object for the query
         const [result] = await connection.query(
             `INSERT INTO cancellations (user_id, booking_id, is_free, reason, refund_amount)
              VALUES (?, ?, ?, ?, ?)`,
@@ -267,7 +303,8 @@ class Cancellation {
      * @returns {Promise<Array>} - Cancellation records
      */
     static async getUserCancellationsHistory(userId) {
-        const [rows] = await connection.query(
+        // Use global pool (db)
+        const [rows] = await db.query(
             `SELECT c.*, b.start_date, b.end_date, cr.make, cr.model
              FROM cancellations c
              JOIN bookings b ON c.booking_id = b.id
@@ -288,7 +325,8 @@ class Cancellation {
     static async getCurrentMonthCancellations(userId) {
         const today = new Date();
         
-        const [rows] = await connection.query(
+        // Use global pool (db)
+        const [rows] = await db.query(
             `SELECT 
                COUNT(*) as total,
                SUM(CASE WHEN is_free = true THEN 1 ELSE 0 END) as free

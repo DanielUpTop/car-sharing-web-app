@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Container,
     Typography,
@@ -40,12 +40,22 @@ import {
     Support as SupportIcon,
     LocalOffer as DiscountIcon,
     ArrowBack as ArrowBackIcon,
-    CardMembership as CardMembershipIcon
+    CardMembership as CardMembershipIcon,
+    Info as InfoIcon
 } from '@mui/icons-material';
 import { format } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
+import { loadStripe } from '@stripe/stripe-js';
+
+// --- Ensure Stripe publishable key is available (e.g., from .env)
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+
+// Retry constants
+const MAX_FETCH_RETRIES = 5; // Maximum number of refetch attempts
+const INITIAL_RETRY_DELAY = 1500; // Initial delay in ms
+const RETRY_BACKOFF_FACTOR = 1.5; // Exponential backoff factor
 
 interface Membership {
     id: number;
@@ -86,7 +96,7 @@ const fallbackMembershipLevels = {
             'Standard booking',
             'No discount on rentals',
             'Standard customer support',
-            '£100 Insurance coverage'
+            'Low insurance coverage'
         ]
     },
     basic: {
@@ -132,58 +142,148 @@ const MembershipView = () => {
     const [updatingRenewal, setUpdatingRenewal] = useState(false);
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [paymentLoading, setPaymentLoading] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
+
+    // Memoize searchParams to avoid unnecessary effect runs if only hash changes etc.
+    const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
 
     useEffect(() => {
-        fetchMembership();
-        fetchMembershipTiers();
-    }, []);
+        console.log('[MembershipView Effect] Running. Search params:', searchParams.toString());
+        let isMounted = true;
+        // Store the timeout ID so it can be cleared
+        let retryTimeoutId: NodeJS.Timeout | null = null;
 
-    const fetchMembership = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const token = localStorage.getItem('token');
+        const loadData = async (isRetry = false) => {
+            if (!isRetry && isMounted) {
+                setLoading(true);
+                setError(null); // Clear previous errors on initial load
+            }
+            // Fetch tiers first or in parallel if independent
+            await fetchMembershipTiers();
+            // Now fetch membership, potentially triggering retries if coming from success redirect
+            const paymentSuccess = searchParams.get('payment_success') === 'true';
+            const expectedType = searchParams.get('type') || undefined; // Get expected type
 
-            console.log('[fetchMembership] Fetching with token:', token ? 'Present' : 'Missing');
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/memberships`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            console.log('[fetchMembership] Response Status:', response.status);
+            if (paymentSuccess && expectedType) {
+                console.log(`[MembershipView Effect] Payment success detected for type: ${expectedType}. Initiating fetch with retry logic.`);
+                fetchMembership(expectedType); // Start fetch with retry logic
+                // Clear the query parameters from URL after initiating fetch
+                console.log('[MembershipView Effect] Clearing payment success query params.');
+                navigate(location.pathname, { replace: true });
+            } else {
+                // Standard fetch if not coming from payment success
+                fetchMembership();
+            }
 
-            if (response.status === 404) {
-                console.log('[fetchMembership] No active membership found (404).');
-                setMembership(null);
-                console.log('[fetchMembership] State set to null.');
+            if (!isRetry && isMounted) {
                 setLoading(false);
-                return;
             }
+        };
 
-            if (!response.ok) {
+        loadData();
+
+        // Cleanup function
+        return () => {
+             isMounted = false;
+             // Clear any pending timeout on unmount
+             if (retryTimeoutId) {
+                 clearTimeout(retryTimeoutId);
+             }
+             console.log('[MembershipView Effect] Cleanup: Unmounted or search params changed.');
+        };
+
+    // Depend on searchParams (derived from location.search)
+    }, [searchParams, navigate]); // Added navigate dependency
+
+    // Modify fetchMembership to handle retry logic
+    const fetchMembership = async (expectedType?: string, retryCount = 0) => {
+        if (retryCount === 0) { // Only set error to null on the first attempt of a sequence
+            setError(null);
+        }
+        // Keep track of the current timeout ID for cleanup
+        let currentRetryTimeoutId: NodeJS.Timeout | null = null;
+
+        try {
+            const token = localStorage.getItem('token');
+            console.log(`[fetchMembership Attempt ${retryCount + 1}] Fetching membership${expectedType ? ` (expecting type: ${expectedType})` : ''}...`);
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/memberships?t=${Date.now()}`, { // Keep cache-busting
+                headers: {
+                     Authorization: `Bearer ${token}`
+                 }
+            });
+            console.log(`[fetchMembership Attempt ${retryCount + 1}] Response Status:`, response.status);
+
+            if (!response.ok && response.status !== 404) {
                 const errorText = await response.text();
-                console.error('[fetchMembership] Response not OK:', response.status, errorText);
-                throw new Error(`Failed to fetch membership data: ${response.status} ${errorText}`);
+                throw new Error(`Failed to fetch membership: ${response.status} ${errorText}`);
             }
 
-            const data = await response.json();
-            console.log('[fetchMembership] Data received:', data);
+            const data: Membership | null = response.status === 404 ? null : await response.json();
+            console.log(`[fetchMembership Attempt ${retryCount + 1}] Data received:`, data);
+
+            // Check if retry is needed
+            if (expectedType && data?.type !== expectedType && retryCount < MAX_FETCH_RETRIES) {
+                const nextRetryCount = retryCount + 1;
+                const delay = INITIAL_RETRY_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, retryCount);
+                console.log(`[fetchMembership] Type mismatch (Expected: ${expectedType}, Got: ${data?.type}). Retrying attempt ${nextRetryCount}/${MAX_FETCH_RETRIES + 1} in ${delay.toFixed(0)}ms...`);
+
+                // Schedule the next retry and store its ID
+                currentRetryTimeoutId = setTimeout(() => {
+                     fetchMembership(expectedType, nextRetryCount);
+                }, delay);
+
+                 // Update the effect's cleanup reference
+                 // This assignment needs to be careful if the effect could re-run
+                 // It might be cleaner to manage timeouts outside the fetch function itself
+                 // For now, let's assume this works within the effect's lifecycle
+
+
+                return; // Stop processing this attempt, wait for retry
+            } else if (expectedType && data?.type !== expectedType && retryCount >= MAX_FETCH_RETRIES) {
+                console.warn(`[fetchMembership] Max retries (${MAX_FETCH_RETRIES + 1}) reached, but membership type still not '${expectedType}'. Displaying potentially stale data.`);
+                setError(`Membership update is taking longer than expected. Please refresh the page in a moment. Expected type: ${expectedType}, Current type: ${data?.type || 'None'}`);
+            } else if (expectedType && data?.type === expectedType) {
+                 console.log(`[fetchMembership] Expected type '${expectedType}' confirmed.`);
+            }
+
+            // If no retry is needed or retries exhausted, update the state
             setMembership(data);
-            console.log('[fetchMembership] Membership state updated with received data.');
             setAutoRenew(data?.auto_renew || false);
+
         } catch (err) {
-            console.error('[fetchMembership] Error caught:', err);
-            setError(err instanceof Error ? err.message : 'An error occurred while fetching membership');
+            console.error(`[fetchMembership Attempt ${retryCount + 1}] Error caught:`, err);
+            // Only set error if it's the final attempt or not a retry scenario
+             if (!expectedType || retryCount >= MAX_FETCH_RETRIES) {
+                setError(err instanceof Error ? err.message : 'An error occurred fetching membership');
+                setMembership(null); // Clear membership on final error
+             } else {
+                 // If an error occurs during a retry attempt before max retries, schedule another retry
+                 const nextRetryCount = retryCount + 1;
+                 const delay = INITIAL_RETRY_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, retryCount);
+                 console.log(`[fetchMembership] Error during fetch. Retrying attempt ${nextRetryCount}/${MAX_FETCH_RETRIES + 1} in ${delay.toFixed(0)}ms...`);
+                 currentRetryTimeoutId = setTimeout(() => {
+                     fetchMembership(expectedType, nextRetryCount);
+                 }, delay);
+                 // Potentially update the effect's cleanup reference here too
+             }
         } finally {
-            setLoading(false);
-            console.log('[fetchMembership] Fetch complete (loading set to false).');
+            console.log(`[fetchMembership Attempt ${retryCount + 1}] Fetch attempt complete.`);
+            // Loading state is managed by the useEffect hook
         }
     };
 
     const fetchMembershipTiers = async () => {
+         // Don't set loading here
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/membership-tiers`, {
-                headers: { Authorization: `Bearer ${token}` }
+            console.log('[fetchMembershipTiers] Fetching tiers...');
+            // Add cache-busting
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/memberships/membership-tiers?t=${Date.now()}`, {
+                 headers: {
+                     Authorization: `Bearer ${token}`
+                 }
             });
 
             if (!response.ok) {
@@ -278,12 +378,14 @@ const MembershipView = () => {
 
     const handleUpgrade = async () => {
         setError(null);
-        console.log(`Attempting to purchase/upgrade to ${selectedType} membership...`);
+        setPaymentLoading(true);
+        console.log(`Initiating purchase/upgrade to ${selectedType} membership...`);
 
         if (!selectedType) {
             setError('No membership type selected for purchase.');
             console.error('handleUpgrade called without selectedType');
             setShowUpgradeDialog(false);
+            setPaymentLoading(false);
             return;
         }
 
@@ -293,23 +395,9 @@ const MembershipView = () => {
                 throw new Error('Authentication token not found. Please log in again.');
             }
 
-            let userId = null;
-            const userStr = localStorage.getItem('user');
-            if (userStr) {
-                try {
-                    const userData = JSON.parse(userStr);
-                    userId = userData.id;
-                } catch (e) {
-                    console.error('Error parsing user data from localStorage', e);
-                }
-            }
-
-            if (!userId) {
-                throw new Error('User ID not found. Please log in again.');
-            }
-
-            const url = `${import.meta.env.VITE_API_URL}/api/memberships/upgrade`;
-            console.log(`Making purchase/upgrade request to: ${url}`);
+            // 1. Call the backend to create a checkout session
+            const url = `${import.meta.env.VITE_API_URL}/api/memberships/create-checkout-session`;
+            console.log(`Requesting checkout session from: ${url}`);
 
             const response = await fetch(url, {
                 method: 'POST',
@@ -322,27 +410,51 @@ const MembershipView = () => {
                 })
             });
 
-            console.log('Purchase/Upgrade response status:', response.status);
+            console.log('Checkout session response status:', response.status);
+            const data = await response.json();
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Purchase/Upgrade error response:', errorText);
-                throw new Error(errorText || `Failed to purchase ${selectedType} membership`);
+                 console.error('Checkout session error response:', data);
+                throw new Error(data.message || `Failed to create payment session for ${selectedType} membership`);
             }
 
-            const message = `You have successfully purchased a ${selectedType} membership!`;
-            toast.success(message);
+            const sessionId = data.sessionId;
+            if (!sessionId) {
+                 console.error('Checkout session response missing sessionId:', data);
+                throw new Error('Failed to retrieve payment session ID.');
+            }
+            
+            console.log(`Received Stripe Session ID: ${sessionId}`);
 
+            // 2. Redirect to Stripe Checkout
+            const stripe = await stripePromise;
+            if (!stripe) {
+                throw new Error('Stripe.js failed to load.');
+            }
+
+            console.log('Redirecting to Stripe Checkout...');
+            const { error: stripeError } = await stripe.redirectToCheckout({
+                sessionId: sessionId,
+            });
+
+            // This point is only reached if redirectToCheckout fails (e.g., network error)
+            if (stripeError) {
+                console.error("Stripe redirection error:", stripeError);
+                throw new Error(stripeError.message || 'Failed to redirect to payment page.');
+            }
+
+            // Success is handled by Stripe redirecting to success_url, no need for client-side toast here
+            // toast.success(`Redirecting to payment page...`); 
             setShowUpgradeDialog(false);
-            await fetchMembership();
-            console.log('[handleUpgrade] fetchMembership completed.');
 
         } catch (err) {
-             const errorMessage = err instanceof Error ? err.message : 'Failed to process membership change';
+            const errorMessage = err instanceof Error ? err.message : 'Failed to process membership change';
             setError(errorMessage);
             toast.error(errorMessage);
-            console.error("Membership change error:", err);
+            console.error("Membership payment initiation error:", err);
             setShowUpgradeDialog(false);
+        } finally {
+            setPaymentLoading(false);
         }
     };
 
@@ -382,6 +494,7 @@ const MembershipView = () => {
             setMembership({ ...membership, auto_renew: checked });
             setAutoRenew(checked);
             toast.success(`Auto-renewal ${checked ? 'enabled' : 'disabled'} successfully`);
+            setShowCancelDialog(false);
         } catch (error) {
             console.error('Error updating auto-renew:', error);
             toast.error(error instanceof Error ? error.message : 'Failed to update auto-renewal setting');
@@ -442,7 +555,7 @@ const MembershipView = () => {
         <>
             <AppBar position="static" color="primary" elevation={1} sx={{ mb: 4 }}>
                 <Toolbar>
-                    <IconButton edge="start" color="inherit" aria-label="back" onClick={() => navigate(-1)} sx={{ mr: 2 }}>
+                    <IconButton edge="start" color="inherit" aria-label="back" onClick={() => navigate('/dashboard')} sx={{ mr: 2 }}>
                         <ArrowBackIcon />
                     </IconButton>
                     <CardMembershipIcon sx={{ mr: 1 }} />
@@ -463,12 +576,19 @@ const MembershipView = () => {
                     Your Membership
                 </Typography>
 
-                {membership?.status === 'cancelled' && (
+                {membership?.status === 'active' && !membership?.auto_renew && (
                     <Alert severity="warning" sx={{ mb: 2 }}>
-                        Your {membership.type} membership has been cancelled and will not renew.
+                        Your {membership.type} membership will not renew automatically.
                         Your benefits remain active until {membership.end_date ? format(new Date(membership.end_date), 'PPP') : 'the end date'}.
                     </Alert>
                 )}
+
+                {membership?.status === 'cancelled' && (
+                     <Alert severity="error" sx={{ mb: 2 }}>
+                         Your {membership.type} membership status is currently Cancelled. Please contact support if this is unexpected.
+                         Benefits active until {membership.end_date ? format(new Date(membership.end_date), 'PPP') : 'the end date'}.
+                     </Alert>
+                 )}
 
                 {!membership ? (
                     <Box sx={{ textAlign: 'center', py: 3 }}>
@@ -516,7 +636,7 @@ const MembershipView = () => {
                                 </Typography>
 
                                 <Box sx={{ mt: 2 }}>
-                                    {membership?.status === 'active' && (
+                                    {membership?.status === 'active' && membership?.auto_renew && (
                                         <Button
                                             variant="outlined"
                                             color="error"
@@ -704,16 +824,18 @@ const MembershipView = () => {
                          </Typography>
                     </DialogContent>
                      <DialogActions sx={{ p: 2 }}>
-                        <Button onClick={() => setShowUpgradeDialog(false)} variant="outlined">
+                        <Button onClick={() => setShowUpgradeDialog(false)} variant="outlined" disabled={paymentLoading}>
                             Cancel
                         </Button>
                         <Button
                              onClick={handleUpgrade}
                             variant="contained"
                             color="primary"
+                            disabled={paymentLoading}
                             sx={{ fontWeight: 'medium' }}
+                            startIcon={paymentLoading ? <CircularProgress size={20} color="inherit"/> : null}
                          >
-                            Confirm Purchase
+                            {paymentLoading ? 'Processing...' : 'Confirm Purchase'}
                         </Button>
                     </DialogActions>
                 </Dialog>
@@ -741,13 +863,13 @@ const MembershipView = () => {
                             Back
                         </Button>
                         <Button
-                            onClick={handleCancelMembership}
+                            onClick={() => handleAutoRenewToggle(false)}
                             variant="contained"
                             color="error"
-                            disabled={!membership}
+                            disabled={!membership || updatingRenewal}
                             sx={{ fontWeight: 'medium' }}
                         >
-                            Confirm Cancellation
+                            {updatingRenewal ? 'Processing...' : 'Confirm Cancellation'}
                         </Button>
                     </DialogActions>
                 </Dialog>

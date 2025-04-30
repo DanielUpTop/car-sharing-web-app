@@ -218,11 +218,28 @@ const MyBookings = () => {
 
             <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
                 <Paper elevation={3} sx={{ p: 3, mb: 4, backgroundColor: '#f8f9fa' }}>
-                    <Typography variant="h4" gutterBottom color="secondary">
+                    <Typography variant="h4" gutterBottom color="primary">
                         My Booking History
                     </Typography>
                     <Typography variant="body1" color="text.secondary">
                         View and manage your car bookings.
+                    </Typography>
+                </Paper>
+
+                {/* New Informational Box */}
+                <Paper 
+                    elevation={2} 
+                    sx={{ 
+                        p: 2, 
+                        mt: 2, 
+                        mb: 3, 
+                        maxWidth: 'md', // Limit width
+                        mx: 'auto', // Center horizontally
+                        backgroundColor: '#e3f2fd' // Light blue background
+                    }}
+                >
+                    <Typography variant="body1" color="text.secondary" align="center">
+                        If your booking has been pended, the admin team will work on final checks before confirming the booking for you! Once confirmed, you will receive an e-mail of your booking information and what to do next.
                     </Typography>
                 </Paper>
 
@@ -324,12 +341,10 @@ const MyBookings = () => {
             </Container>
             <CancelBookingDialog
                 open={cancelDialogOpen}
-                onClose={() => {
-                    setCancelDialogOpen(false);
-                    setSelectedBooking(null);
-                }}
-                onConfirm={() => selectedBooking && handleCancelBooking(selectedBooking.id)}
+                onClose={() => setCancelDialogOpen(false)}
+                onConfirm={() => handleCancelBooking(selectedBooking!.id)}
                 loading={cancelLoading}
+                error={error}
                 bookingDetails={selectedBooking}
             />
             <RatingDialog

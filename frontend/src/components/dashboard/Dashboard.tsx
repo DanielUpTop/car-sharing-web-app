@@ -84,7 +84,7 @@ const Dashboard = () => {
                             '&:hover': { transform: 'scale(1.02)', transition: 'transform 0.2s' }
                         }}>
                             <CardContent sx={{ flexGrow: 1, textAlign: 'center', py: 4 }}>
-                                <BookOnlineIcon sx={{ fontSize: 60, color: 'secondary.main', mb: 2 }} />
+                                <BookOnlineIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
                                 <Typography gutterBottom variant="h5" component="h2">
                                     My Bookings
                                 </Typography>
@@ -96,7 +96,7 @@ const Dashboard = () => {
                                 <Button 
                                     onClick={() => navigate('/dashboard/bookings')}
                                     variant="contained" 
-                                    color="secondary"
+                                    color="primary"
                                     size="large"
                                 >
                                     View Bookings
@@ -171,7 +171,7 @@ const Dashboard = () => {
                             '&:hover': { transform: 'scale(1.02)', transition: 'transform 0.2s' }
                         }}>
                             <CardContent sx={{ flexGrow: 1, textAlign: 'center', py: 4 }}>
-                                <HelpIcon sx={{ fontSize: 60, color: 'warning.main', mb: 2 }} />
+                                <HelpIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
                                 <Typography gutterBottom variant="h5" component="h2">
                                     Help Center
                                 </Typography>
@@ -183,7 +183,7 @@ const Dashboard = () => {
                                 <Button 
                                     onClick={() => navigate('/dashboard/help')}
                                     variant="contained" 
-                                    color="warning"
+                                    color="primary"
                                     size="large"
                                 >
                                     View Help Center
@@ -229,7 +229,7 @@ const Dashboard = () => {
                             '&:hover': { transform: 'scale(1.02)', transition: 'transform 0.2s' }
                         }}>
                             <CardContent sx={{ flexGrow: 1, textAlign: 'center', py: 4 }}>
-                                <SecurityIcon sx={{ fontSize: 60, color: 'error.main', mb: 2 }} />
+                                <SecurityIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
                                 <Typography gutterBottom variant="h5" component="h2">
                                     Insurance
                                 </Typography>
@@ -241,7 +241,7 @@ const Dashboard = () => {
                                 <Button 
                                     onClick={() => navigate('/dashboard/insurance')}
                                     variant="contained" 
-                                    color="error"
+                                    color="primary"
                                     size="large"
                                 >
                                     View Insurance
@@ -258,7 +258,7 @@ const Dashboard = () => {
                             '&:hover': { transform: 'scale(1.02)', transition: 'transform 0.2s' }
                         }}>
                             <CardContent sx={{ flexGrow: 1, textAlign: 'center', py: 4 }}>
-                                <ChatIcon sx={{ fontSize: 60, color: 'success.main', mb: 2 }} />
+                                <ChatIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
                                 <Typography gutterBottom variant="h5" component="h2">
                                     Live Chat
                                 </Typography>
@@ -270,7 +270,7 @@ const Dashboard = () => {
                                 <Button 
                                     onClick={() => navigate('/dashboard/chat')}
                                     variant="contained" 
-                                    color="success"
+                                    color="primary"
                                     size="large"
                                 >
                                     Start Chat

@@ -125,7 +125,17 @@ router.post('/', authenticateToken, async (req, res) => {
         );
         }
 
+        // --> Add step to update car status
+        console.log(`[Booking ${bookingId}] Attempting to update car ${car_id} status to 'booked'.`);
+        const [carUpdateResult] = await connection.query(
+            'UPDATE cars SET availability_status = ? WHERE id = ?',
+            ['booked', car_id]
+        );
+        console.log(`[Booking ${bookingId}] Car update result for car ${car_id}:`, carUpdateResult);
+        // <-- End added step
+
         await connection.commit();
+        console.log(`[Booking ${bookingId}] Transaction committed.`);
 
         res.status(201).json({
             message: 'Booking created successfully',
@@ -194,6 +204,7 @@ router.patch('/:id/status', authenticateToken, async (req, res) => {
 
 // Update the cancellation route
 router.put('/:id/cancel', authenticateToken, async (req, res) => {
+    console.log(`[Cancel Booking] Received request for booking ID: ${req.params.id}, User ID: ${req.user.id}`);
     const connection = await db.getConnection();
     
     try {
@@ -201,24 +212,29 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
         const userId = req.user.id;
         
         // Start transaction
+        console.log(`[Cancel Booking ${bookingId}] Starting transaction.`);
         await connection.beginTransaction();
         
         // First check if the booking exists and belongs to the user
+        console.log(`[Cancel Booking ${bookingId}] Checking booking existence and ownership.`);
         const [booking] = await connection.query(
             'SELECT * FROM bookings WHERE id = ? AND user_id = ?',
             [bookingId, userId]
         );
         
         if (booking.length === 0) {
+            console.log(`[Cancel Booking ${bookingId}] Booking not found or doesn't belong to user ${userId}. Rolling back.`);
             await connection.rollback();
             return res.status(404).json({
                 message: 'Booking not found or does not belong to user',
                 success: false
             });
         }
+        console.log(`[Cancel Booking ${bookingId}] Booking found. Status: ${booking[0].status}`);
         
         // Check if the booking is already cancelled
         if (booking[0].status === 'cancelled') {
+            console.log(`[Cancel Booking ${bookingId}] Booking already cancelled. Rolling back.`);
             await connection.rollback();
             return res.status(400).json({
                 message: 'Booking is already cancelled',
@@ -227,6 +243,7 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
         }
         
         // Check if user is eligible for free cancellation based on membership
+        console.log(`[Cancel Booking ${bookingId}] Checking cancellation eligibility for user ${userId}.`);
         const eligibility = await Cancellation.checkEligibility(userId);
         const isFree = eligibility.eligible;
         let membershipType = 'none';
@@ -234,58 +251,65 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
         if (eligibility.membership) {
             membershipType = eligibility.membership.type;
         }
+        console.log(`[Cancel Booking ${bookingId}] Eligibility check complete. Free cancellation: ${isFree}, Membership: ${membershipType}`);
 
         // Update booking status
-        await connection.query(
+        console.log(`[Cancel Booking ${bookingId}] Updating booking status to cancelled.`);
+        const [updateResult] = await connection.query(
             'UPDATE bookings SET status = ? WHERE id = ?',
             ['cancelled', bookingId]
         );
+        console.log(`[Cancel Booking ${bookingId}] Booking status update result:`, updateResult);
+        if (updateResult.affectedRows === 0) {
+             console.log(`[Cancel Booking ${bookingId}] Failed to update booking status (affectedRows=0). Rolling back.`);
+             await connection.rollback();
+             throw new Error('Failed to update booking status in database.');
+        }
 
-        // Restore car availability
-        await connection.query(
+        // Restore car availability (assuming car exists)
+        console.log(`[Cancel Booking ${bookingId}] Restoring availability for car ID: ${booking[0].car_id}.`);
+        const [carUpdateResult] = await connection.query(
             'UPDATE cars SET availability_status = ? WHERE id = ?',
             ['available', booking[0].car_id]
         );
+         console.log(`[Cancel Booking ${bookingId}] Car availability update result:`, carUpdateResult);
+         // We might not rollback if car update fails, depends on business logic
 
         // Record the cancellation
-        await Cancellation.recordCancellation(userId, bookingId, isFree, membershipType);
-        
-        // Process refund if eligible for free cancellation
-        let refundAmount = 0;
-        if (isFree) {
-            refundAmount = booking[0].total_price;
-            // Here you would add logic to process the actual refund through your payment system
-            
-            // Record the refund in the database
-            await connection.query(
-                `INSERT INTO refunds (booking_id, amount, reason, status) 
-                 VALUES (?, ?, ?, ?)`,
-                [bookingId, refundAmount, 'Free membership cancellation', 'completed']
-            );
-        }
-        
+        console.log(`[Cancel Booking ${bookingId}] Recording cancellation details.`);
+        const cancellationReason = req.body.reason || 'User cancellation'; // Optional reason from request body
+        await Cancellation.recordCancellation(
+            connection,         // connection object
+            userId,             // userId
+            bookingId,          // bookingId
+            isFree,             // isFree (boolean)
+            cancellationReason, // reason (string)
+            0.00                // refundAmount (decimal) - Assuming 0 for now
+        );
+        console.log(`[Cancel Booking ${bookingId}] Cancellation recorded.`);
+
         // Commit transaction
+        console.log(`[Cancel Booking ${bookingId}] Committing transaction.`);
         await connection.commit();
-        
-        // Return the result with cancellation info
+        console.log(`[Cancel Booking ${bookingId}] Transaction committed successfully.`);
+
         res.json({
             message: 'Booking cancelled successfully',
-            success: true,
-            isFree,
-            remainingCancellations: eligibility.remainingCancellations,
-            refundAmount: refundAmount,
-            membership: membershipType
+            success: true
         });
-        
+
     } catch (error) {
+        console.error(`[Cancel Booking ${req.params.id}] Error during cancellation process:`, error);
+        // Ensure rollback happens on any error
+        console.log(`[Cancel Booking ${req.params.id}] Rolling back transaction due to error.`);
         await connection.rollback();
-        console.error('Error cancelling booking:', error);
-        res.status(500).json({ 
-            message: 'Error cancelling booking',
+        res.status(500).json({
+            message: 'Failed to cancel booking due to server error',
             success: false,
             error: error.message
         });
     } finally {
+        console.log(`[Cancel Booking ${req.params.id}] Releasing database connection.`);
         connection.release();
     }
 });

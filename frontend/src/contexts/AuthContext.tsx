@@ -66,34 +66,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const storedUser = localStorage.getItem('user');
 
             if (token && storedUser) {
+                let parsedUser = null;
                 try {
                     // Try to parse stored user first
-                    const parsedUser = JSON.parse(storedUser);
+                    parsedUser = JSON.parse(storedUser);
                     setUser(parsedUser);
+                    console.log('[AuthContext] User set from localStorage');
+                    setLoading(false); // <-- Set loading false immediately after setting user
                     
-                    // Verify token in background
+                    // Verify token in background (doesn't block initial load)
                     try {
                         await api.get('/api/auth/verify-token');
-                        console.log('[AuthContext] Token verified successfully');
+                        console.log('[AuthContext] Background token verification successful');
                     } catch (error: any) {
-                        console.error('[AuthContext] Token verification failed:', error.response?.status);
+                        console.error('[AuthContext] Background token verification failed:', error.response?.status);
+                        // If background check fails, log out
                         if (error.response?.status === 401 || error.response?.status === 404) {
-                            console.log('[AuthContext] Invalid token, logging out');
+                            console.log('[AuthContext] Invalid token detected in background, logging out');
                             logout();
                         }
+                        // No need to set loading false here again
                     }
                 } catch (error) {
-                    console.error('[AuthContext] Failed to initialize auth:', error);
-                    logout();
+                    console.error('[AuthContext] Failed to parse user from localStorage or init auth:', error);
+                    logout(); // Log out if parsing fails
+                    setLoading(false); // Ensure loading is false even on error
                 }
             } else {
-                setLoading(false);
+                 console.log('[AuthContext] No token/user found in localStorage');
+                setLoading(false); // No user/token, stop loading
             }
-            setLoading(false);
+            // setLoading(false); // Removed redundant setLoading here
         };
 
         initAuth();
-    }, []);
+    }, []); // Empty dependency array means this runs once on mount
 
     const value = {
         user,

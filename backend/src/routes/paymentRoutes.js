@@ -9,8 +9,12 @@ const paymentController = require('../controllers/paymentController');
 router.post('/create-payment-intent', authenticateToken, paymentController.createPaymentIntent); // Restore original with authenticateToken
 // router.post('/create-payment-intent', paymentController.createPaymentIntent); // Temporarily remove authenticateToken for debugging
 
-// Handle Stripe webhook
-router.post('/webhook', express.raw({ type: 'application/json' }), paymentController.handleWebhook);
+// Handle Stripe webhook - express.raw MUST be handled globally in app.js
+// router.post(
+//     '/webhook',
+//     express.raw({type: 'application/json'}), // REMOVE raw parser from here
+//     paymentController.handleWebhook
+// );
 
 // Get payment status
 router.get('/status/:paymentIntentId', authenticateToken, async (req, res) => {

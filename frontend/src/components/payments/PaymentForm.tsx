@@ -72,12 +72,14 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
         } else if (paymentIntent) {
              // This might be reached if redirect: 'if_required' completes without redirecting
              // (e.g., payment success without 3D Secure)
-             console.log('Payment confirmation finished without redirect. Status:', paymentIntent.status);
+             console.log('PaymentForm: Payment confirmation finished without redirect. Status:', paymentIntent.status);
              if (paymentIntent.status === 'succeeded') {
+                 console.log('PaymentForm: Payment SUCCEEDED. Calling onSuccess...');
                  setMessage('Payment successful!');
                  onSuccess(paymentIntent.id);
              } else {
                  setMessage(`Payment status: ${paymentIntent.status}`);
+                 console.log('PaymentForm: Payment status not succeeded:', paymentIntent.status);
                  // Consider calling onError or just displaying message
              }
         } else {

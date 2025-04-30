@@ -882,6 +882,15 @@ const MapView = () => {
     };
     // --- End Core Logic ---
 
+    // --- Booking Completion Handler ---
+    const handleBookingCompleted = (bookedCarId: number) => {
+        console.log(`Booking completed for car ID: ${bookedCarId}. Removing from map.`);
+        // Update the main cars list to remove the booked car
+        setCars(prevCars => prevCars.filter(car => car.id !== bookedCarId));
+        // carsInView will update automatically based on the new 'cars' state
+    };
+    // --- End Booking Completion Handler ---
+
     return (
         <Box sx={{ display: 'flex', height: '100vh', flexDirection: 'column', bgcolor: 'grey.100' }}>
             {/* Top Bar */}
@@ -1120,10 +1129,7 @@ const MapView = () => {
                     }}
                     open={isBookingDialogOpen}
                     onClose={handleCloseBookingDialog}
-                    onBookingComplete={() => {
-                        console.log('Booking complete callback triggered from MapView');
-                        handleCloseBookingDialog();
-                    }}
+                    onBookingComplete={handleBookingCompleted}
                 />
             )}
 

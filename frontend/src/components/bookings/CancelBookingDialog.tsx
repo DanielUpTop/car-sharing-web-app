@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import WarningIcon from '@mui/icons-material/Warning';
 import { canCancelBooking, MembershipType } from '../../utils/membershipUtils';
+import { format } from 'date-fns';
 
 interface Booking {
     id: number;
@@ -30,6 +31,7 @@ interface CancelBookingDialogProps {
     onClose: () => void;
     onConfirm: () => void;
     loading: boolean;
+    error: string | null;
     bookingDetails: Booking | null;
 }
 
@@ -38,12 +40,11 @@ const CancelBookingDialog = ({
     onClose, 
     onConfirm, 
     loading,
+    error,
     bookingDetails 
 }: CancelBookingDialogProps) => {
     const [membershipType, setMembershipType] = useState<MembershipType>(null);
     const [cancellationsUsed, setCancellationsUsed] = useState(0);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchMembershipInfo = async () => {
@@ -82,37 +83,9 @@ const CancelBookingDialog = ({
 
     const freeCancel = canCancelBooking(membershipType, cancellationsUsed);
 
-    const handleCancel = async () => {
-        if (!bookingDetails?.id) return;
-        
-        try {
-            setIsSubmitting(true);
-            const token = localStorage.getItem('token');
-            
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/bookings/${bookingDetails.id}/cancel`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    reason: cancelReason,
-                    freeCancel: freeCancel // Include whether this is a free cancellation based on membership
-                })
-            });
-            
-            if (response.ok) {
-                onConfirm();
-                onClose();
-            } else {
-                const errorData = await response.json();
-                setError(errorData.message || 'Failed to cancel booking');
-            }
-        } catch (err) {
-            setError('An error occurred while trying to cancel the booking');
-            console.error('Error cancelling booking:', err);
-        } finally {
-            setIsSubmitting(false);
+    const handleConfirmCancel = () => {
+        if (!loading) {
+            onConfirm();
         }
     };
 
@@ -122,6 +95,11 @@ const CancelBookingDialog = ({
                 Cancel Booking
             </DialogTitle>
             <DialogContent sx={{ mt: 2 }}>
+                {error && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                        {error}
+                    </Alert>
+                )}
                 <Box display="flex" alignItems="center" mb={2}>
                     <WarningIcon color="error" sx={{ fontSize: 40, mr: 2 }} />
                     <Typography variant="h6">
@@ -166,7 +144,7 @@ const CancelBookingDialog = ({
                     Keep Booking
                 </Button>
                 <Button
-                    onClick={handleCancel}
+                    onClick={handleConfirmCancel}
                     variant="contained"
                     color="error"
                     disabled={loading}

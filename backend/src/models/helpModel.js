@@ -104,7 +104,7 @@ class Help {
             
             if (tickets.length === 0) {
                 // Get a user ID to associate with tickets
-                const [users] = await db.query('SELECT id FROM users WHERE is_admin = 0 LIMIT 1');
+                const [users] = await db.query("SELECT id FROM users WHERE role = 'rentee' LIMIT 1");
                 
                 if (users.length > 0) {
                     const userId = users[0].id;

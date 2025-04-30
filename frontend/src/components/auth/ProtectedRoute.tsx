@@ -10,13 +10,14 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles, requireAdmin }) => {
-    const { isAuthenticated, loading, user } = useAuth();
+    const { isAuthenticated, loading, user, token } = useAuth();
 
     console.log('[ProtectedRoute] Checking access...', {
         isAuthenticated,
         loading,
         userEmail: user?.email,
         userRole: user?.role,
+        hasToken: !!token,
         allowedRoles,
         requireAdmin,
         hasUser: !!user
@@ -31,16 +32,20 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles,
         );
     }
 
-    // Check authentication first
     if (!isAuthenticated || !user) {
-        console.error('[ProtectedRoute] Access denied: Not authenticated', {
-            isAuthenticated,
-            hasUser: !!user
-        });
-        return <Navigate to="/login" replace />;
+        if (!token) {
+            console.error('[ProtectedRoute] Access denied: Not authenticated and no token found.');
+            return <Navigate to="/login" replace />;
+        } else {
+            console.warn('[ProtectedRoute] Not authenticated but token exists. Waiting briefly (showing spinner). State might be updating...');
+            return (
+                <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+                    <CircularProgress />
+                </Box>
+            );
+        }
     }
 
-    // Check if admin access is required
     if (requireAdmin && user.role !== 'admin') {
         console.error('[ProtectedRoute] Access denied: Admin role required', {
             userRole: user.role
@@ -48,7 +53,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles,
         return <Navigate to="/dashboard" replace />;
     }
 
-    // Check role-based access
     if (allowedRoles && !allowedRoles.includes(user.role)) {
         console.error('[ProtectedRoute] Access denied: Role not allowed', {
             userRole: user.role,
@@ -57,6 +61,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles,
         return <Navigate to="/dashboard" replace />;
     }
 
+    console.log('[ProtectedRoute] Access granted.');
     return <>{children}</>;
 };
 

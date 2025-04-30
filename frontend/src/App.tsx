@@ -1,11 +1,14 @@
-import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import React, { useEffect, useContext } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ThemeProvider } from '@mui/material/styles'
 import { LocalizationProvider } from '@mui/x-date-pickers'
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
 import theme from './theme'
 import './App.css'
 import { Toaster } from 'react-hot-toast'
+import { toast } from 'react-hot-toast'
+import InfoIcon from '@mui/icons-material/Info'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 
 // Components
 import HomePage from './components/home/HomePage'
@@ -40,8 +43,102 @@ import AdminHelpCenter from './components/admin/help/AdminHelpCenter'
 import MembershipManagement from './components/admin/MembershipManagement'
 import InsuranceManagement from './components/admin/InsuranceManagement'
 
-// Auth Context
-import { AuthProvider } from './contexts/AuthContext'
+// New component to handle query parameters globally
+const QueryParamHandler = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { loading } = useAuth(); // Removed checkAuthStatus as it doesn't exist
+
+  useEffect(() => {
+    // Avoid processing if auth state is loading or no relevant path/params
+    if (loading || (!location.search && location.pathname !== '/memberships/success')) {
+        console.log('[QueryParamHandler] Skipping processing (loading or no relevant search params/path).');
+        return;
+    }
+    console.log('[QueryParamHandler] Processing:', location.pathname, location.search);
+
+    const queryParams = new URLSearchParams(location.search);
+    let shouldNavigate = false;
+    let navigateTo = location.pathname; // Default to staying on current page
+    let navigationOptions = { replace: true }; // Base options
+
+    // --- Membership Success Handling ---
+    if (location.pathname === '/memberships/success' && queryParams.has('session_id')) {
+      const sessionId = queryParams.get('session_id');
+      console.log('[QueryParamHandler] Membership Payment success detected via session_id:', sessionId);
+
+      // TODO (Optional): Verify session_id with backend here.
+      // The backend webhook should handle the actual membership update reliably.
+
+      setTimeout(() => toast.success('Membership payment successful! Your details may take a moment to update.'), 100);
+
+      // Removed call to non-existent checkAuthStatus.
+      // Relying on navigation to /memberships and MembershipView re-fetching data.
+
+      navigateTo = '/memberships';
+      shouldNavigate = true;
+      queryParams.delete('session_id');
+      // Add state for potential use on the target page (optional)
+      // Note: Linter might complain, but react-router supports this.
+      navigationOptions = { ...navigationOptions, state: { membershipSuccess: true } };
+
+    }
+    // --- Keep existing handlers for other scenarios ---
+    else if (queryParams.has('cancelled')) { // Stripe Cancel URL param
+      console.log('[QueryParamHandler] Payment cancellation detected.');
+      setTimeout(() => toast('Payment process cancelled.', { icon: <InfoIcon color="info" /> }), 100);
+      navigateTo = '/memberships'; // Go back to memberships page
+      shouldNavigate = true;
+      queryParams.delete('cancelled');
+    } else if (queryParams.has('payment_failed')) { // Custom failure param (if used)
+      console.log('[QueryParamHandler] Payment failure detected.');
+      setTimeout(() => toast.error('Payment failed. Please try again or contact support.'), 100);
+       navigateTo = '/memberships'; // Go back to memberships page
+      shouldNavigate = true;
+       queryParams.delete('payment_failed');
+    } else if (queryParams.has('error')) { // Generic error param (if used)
+      const errorType = queryParams.get('error') || 'Unknown error';
+      console.log('[QueryParamHandler] Generic error detected:', errorType);
+      setTimeout(() => toast.error(`An error occurred: ${decodeURIComponent(errorType)}. Please try again.`), 100);
+       navigateTo = '/memberships'; // Go back to memberships page
+       shouldNavigate = true;
+       queryParams.delete('error');
+    }
+    // --- Deprecated/Alternative Flow Handler (Keep for now?) ---
+    // This might be for a different payment flow (e.g., direct Payment Intents)
+    // If '/dashboard/membership' is never the intended redirect, this can be removed later.
+     else if (queryParams.has('payment_success')) {
+      const type = queryParams.get('type') || 'item'; // Generic type
+      console.log('[QueryParamHandler] Generic Payment success detected for type:', type);
+      setTimeout(() => toast.success(`Successfully purchased ${type}!`), 100);
+      // Original redirect was '/dashboard/membership', changing to '/memberships' for consistency,
+      // but review if this flow is still needed and where it *should* go.
+      navigateTo = '/memberships'; // Changed from '/dashboard/membership'
+      shouldNavigate = true;
+      queryParams.delete('payment_success');
+      queryParams.delete('type');
+    }
+
+    // Construct the final path with any remaining query params
+    const remainingParams = queryParams.toString();
+    // Use navigateTo which might have been updated. If navigating away from /memberships/success, don't include it.
+    const targetPath = (navigateTo === '/memberships/success' && shouldNavigate) ? location.pathname : navigateTo;
+    const finalNavigatePath = targetPath + (remainingParams ? `?${remainingParams}` : '');
+
+    // Only navigate if we explicitly decided to and the target is different
+    if (shouldNavigate && finalNavigatePath !== location.pathname + location.search) {
+      console.log(`[QueryParamHandler] Navigating from ${location.pathname}${location.search} to ${finalNavigatePath}`);
+      setTimeout(() => navigate(finalNavigatePath, navigationOptions), 150);
+    } else if (shouldNavigate) {
+        console.log(`[QueryParamHandler] Already at target or no change needed: ${finalNavigatePath}`);
+    } else {
+      console.log('[QueryParamHandler] No navigation needed by this handler.');
+    }
+
+  }, [location.search, location.pathname, navigate, loading]); // Removed checkAuthStatus dependency
+
+  return null; // This component doesn't render anything visible
+};
 
 function App() {
   return (
@@ -50,6 +147,7 @@ function App() {
         <LocalizationProvider dateAdapter={AdapterDateFns}>
           <AuthProvider>
             <Toaster position="top-center" reverseOrder={false} />
+            <QueryParamHandler />
             <Routes>
               {/* Public routes */}
               <Route path="/" element={<HomePage />} />
@@ -57,6 +155,7 @@ function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/completion" element={<PaymentCompletion />} />
+              <Route path="/memberships/success" element={<MembershipSuccessRedirecting />} />
 
               {/* User routes */}
               <Route path="/dashboard/*" element={
@@ -72,6 +171,13 @@ function App() {
                     <Route path="help" element={<HelpCenter />} />
                     <Route path="chat" element={<EnhancedChat />} />
                   </Routes>
+                </ProtectedRoute>
+              } />
+
+              {/* Changed route path from /dashboard/membership to /memberships */}
+              <Route path="/memberships" element={
+                <ProtectedRoute>
+                  <MembershipView />
                 </ProtectedRoute>
               } />
 
@@ -114,5 +220,15 @@ function App() {
     </Router>
   )
 }
+
+// Simple component to show while redirecting from /memberships/success
+// You might want to style this or add a loading indicator
+const MembershipSuccessRedirecting = () => {
+    return (
+        <div style={{ textAlign: 'center', padding: '50px', fontFamily: 'sans-serif' }}>
+            Processing membership update...
+        </div>
+    );
+};
 
 export default App

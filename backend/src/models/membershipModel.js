@@ -44,9 +44,10 @@ class Membership {
                 user_id INT NOT NULL,
                 type ENUM('none', 'basic', 'premium', 'platinum') NOT NULL DEFAULT 'none',
                 start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                end_date TIMESTAMP,
-                status ENUM('active', 'expired', 'cancelled') NOT NULL DEFAULT 'active',
+                end_date TIMESTAMP, -- Will store Stripe's period end for active/cancelling subscriptions
+                status ENUM('active', 'expired', 'cancelled', 'pending', 'cancelling') NOT NULL DEFAULT 'active', -- Added 'pending', 'cancelling'
                 auto_renew BOOLEAN DEFAULT true,
+                stripe_subscription_id VARCHAR(255) NULL UNIQUE, -- Added Stripe Subscription ID
                 benefits JSON,
                 payment_history JSON,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -127,7 +128,7 @@ class Membership {
     static async getUserMembership(userId) {
         const [memberships] = await db.query(
             `SELECT * FROM memberships 
-             WHERE user_id = ? AND status IN ('active', 'cancelled')
+             WHERE user_id = ? AND status = 'active'
              ORDER BY updated_at DESC 
              LIMIT 1`,
             [userId]

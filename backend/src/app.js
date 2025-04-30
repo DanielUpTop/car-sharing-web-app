@@ -4,6 +4,9 @@ const path = require('path');
 const helmet = require('helmet');
 require('dotenv').config();
 
+// Import controllers needed for direct route definition
+const paymentController = require('./controllers/paymentController'); 
+
 // Import routes
 const authRoutes = require('./routes/authRoutes');
 const carRoutes = require('./routes/carRoutes');
@@ -11,7 +14,7 @@ const bookingRoutes = require('./routes/bookingRoutes');
 const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const adminBookingRoutes = require('./routes/adminBookingRoutes');
-const paymentRoutes = require('./routes/paymentRoutes');
+const paymentRoutes = require('./routes/paymentRoutes'); // For non-webhook payment routes
 const chatRoutes = require('./routes/chatRoutes');
 const adminChatRoutes = require('./routes/adminChatRoutes');
 const supportTicketsRoutes = require('./routes/supportTicketsRoutes');
@@ -23,13 +26,25 @@ const geocodeRoutes = require('./routes/geocodeRoutes');
 
 const app = express();
 
-// Middleware
+// --- IMPORTANT: Define Stripe webhook route BEFORE global body parsers ---
+// Apply raw body parser ONLY to this route
+app.post('/api/payments/webhook', 
+    express.raw({type: '*/*'}), // Make type completely generic
+    paymentController.handleWebhook
+);
+// --- END Specific Webhook Route ---
+
+// --- General Middleware (Applied AFTER specific webhook route) ---
 app.use(cors({
     origin: ['http://localhost:5173', 'http://localhost:5174'], // Your frontend URLs
     credentials: true
 }));
 
-// Disable the default Content-Security-Policy
+// Standard JSON and URL-encoded body parsers for other routes
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Security headers (consider reviewing CSP directives)
 app.use(
     helmet({
         contentSecurityPolicy: {
@@ -52,24 +67,10 @@ app.use(
     })
 );
 
-// Special handling for Stripe webhook endpoint - MUST come BEFORE express.json()
-app.post('/api/payments/webhook', express.raw({type: 'application/json'}));
-
-// Regular middleware for other routes
-app.use((req, res, next) => {
-    if (req.originalUrl === '/api/payments/webhook') {
-        next();
-    } else {
-        express.json()(req, res, next);
-    }
-});
-
-app.use(express.urlencoded({ extended: true }));
-
 // Serve static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Routes
+// --- Routes (Webhook is handled above) ---
 app.use('/api/auth', authRoutes);
 app.use('/api/cars', carRoutes);
 app.use('/api/bookings', bookingRoutes);
@@ -77,6 +78,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/bookings', adminBookingRoutes);
 app.use('/api/admin/insurance', adminInsuranceRoutes);
+// Mount paymentRoutes for non-webhook endpoints like /create-payment-intent
+// Ensure /webhook is NOT defined again within paymentRoutes.js
 app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/chat/admin', adminChatRoutes);
@@ -98,12 +101,6 @@ app.use((err, req, res, next) => {
 // Handle 404
 app.use((req, res) => {
     res.status(404).json({ message: 'Route not found' });
-});
-
-const PORT = process.env.PORT || 5001;
-
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
 });
 
 module.exports = app; 
