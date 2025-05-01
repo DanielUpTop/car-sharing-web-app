@@ -64,13 +64,17 @@ const Login = () => {
             
             // Handle specific error responses from the backend
             if (err.response) {
-                // The request was made and the server responded with a status code
                 const { data, status } = err.response;
-                
-                if (status === 401) {
+                const errorMessage = data?.message?.toLowerCase() || ''; // Get message safely
+
+                // Check for deactivated/blocked account message first
+                if (errorMessage.includes('blocked') || errorMessage.includes('deactivated') || errorMessage.includes('inactive')) {
+                    setError('Your account has been deactivated, please contact the CarShare admin team for more information on this');
+                } else if (status === 401) {
                     setError(data.message || 'Invalid email or password');
                 } else if (status === 403) {
-                    setError(data.message || 'Account is not active');
+                    // This might still be useful for other permission issues
+                    setError(data.message || 'Permission denied');
                 } else {
                     setError(data.message || 'An error occurred during login');
                 }

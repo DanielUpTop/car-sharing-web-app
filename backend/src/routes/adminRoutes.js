@@ -7,8 +7,13 @@ const path = require('path');
 const fs = require('fs').promises;
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const {
+    getAllUsers,
+    getUserByIdAdmin,
+    updateUserAdmin,
+} = require('../controllers/adminController');
 
-// Apply authentication and admin middleware to all routes
+// Apply authentication and admin middleware to all routes in this file
 router.use(authenticateToken);
 router.use(isAdmin);
 
@@ -86,22 +91,6 @@ router.delete('/cars/:id', async (req, res) => {
         res.json({ message: 'Car deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: 'Error deleting car' });
-    }
-});
-
-// Get all users
-router.get('/users', async (req, res) => {
-    try {
-        const [users] = await db.query(`
-            SELECT id, first_name, last_name, email, role, status, created_at
-            FROM users
-            WHERE role != 'admin'
-            ORDER BY created_at DESC
-        `);
-        res.json(users);
-    } catch (error) {
-        console.error('Error fetching users:', error);
-        res.status(500).json({ message: 'Error fetching users' });
     }
 });
 
@@ -232,47 +221,6 @@ router.put('/cars/:id/status', async (req, res) => {
     } catch (error) {
         console.error('Error updating car status:', error);
         res.status(500).json({ message: 'Error updating car status' });
-    }
-});
-
-// Update user
-router.put('/users/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updates = req.body;
-
-        // Don't allow updating email or password through this route
-        delete updates.email;
-        delete updates.password;
-
-        await db.query(
-            'UPDATE users SET ? WHERE id = ?',
-            [updates, id]
-        );
-
-        res.json({ message: 'User updated successfully' });
-    } catch (error) {
-        console.error('Error updating user:', error);
-        res.status(500).json({ message: 'Error updating user' });
-    }
-});
-
-// Get user details
-router.get('/users/:id', async (req, res) => {
-    try {
-        const [users] = await db.query(
-            'SELECT id, first_name, last_name, email, role, created_at FROM users WHERE id = ?',
-            [req.params.id]
-        );
-
-        if (users.length === 0) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        res.json(users[0]);
-    } catch (error) {
-        console.error('Error fetching user:', error);
-        res.status(500).json({ message: 'Error fetching user' });
     }
 });
 
@@ -516,33 +464,6 @@ router.get('/bookings/stats', async (req, res) => {
     }
 });
 
-// Helper function for forecasting
-function calculateForecast(data) {
-    if (data.length < 2) return { nextWeek: 0, nextMonth: 0, trend: 0 };
-
-    const xValues = data.map((_, i) => i);
-    const yValues = data.map(d => d.daily_revenue);
-    
-    const n = data.length;
-    const sumX = xValues.reduce((a, b) => a + b, 0);
-    const sumY = yValues.reduce((a, b) => a + b, 0);
-    const sumXY = xValues.reduce((a, b, i) => a + b * yValues[i], 0);
-    const sumXX = xValues.reduce((a, b) => a + b * b, 0);
-    
-    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
-    
-    const nextWeek = intercept + slope * (n + 7);
-    const nextMonth = intercept + slope * (n + 30);
-    const trend = slope > 0 ? 'increasing' : slope < 0 ? 'decreasing' : 'stable';
-
-    return {
-        nextWeek: Math.max(0, nextWeek),
-        nextMonth: Math.max(0, nextMonth),
-        trend
-    };
-}
-
 // Get analytics data for admin dashboard
 router.get('/analytics', async (req, res) => {
     try {
@@ -649,471 +570,6 @@ router.get('/analytics', async (req, res) => {
     } catch (err) {
         console.error('Error fetching analytics:', err);
         res.status(500).json({ error: 'Failed to fetch analytics data' });
-    }
-});
-
-// Update user status
-router.put('/users/:id/status', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status } = req.body;
-        await db.query('UPDATE users SET status = ? WHERE id = ?', [status, id]);
-        res.json({ message: 'User status updated successfully' });
-    } catch (error) {
-        console.error('Error updating user status:', error);
-        res.status(500).json({ message: 'Error updating user status' });
-    }
-});
-
-// Get user activity logs
-router.get('/users/:id/logs', async (req, res) => {
-    try {
-        const [logs] = await db.query(
-            'SELECT * FROM user_activity_logs WHERE user_id = ? ORDER BY timestamp DESC',
-            [req.params.id]
-        );
-        res.json(logs);
-    } catch (error) {
-        console.error('Error fetching user logs:', error);
-        res.status(500).json({ message: 'Error fetching user logs' });
-    }
-});
-
-// Get all memberships with user details (admin view)
-router.get('/memberships', async (req, res) => {
-    // Log entry point and confirmed user
-    console.log(`[GET /admin/memberships] Handler entered. User: ${req.user?.email}, Role: ${req.user?.role}`); 
-    
-    try {
-        console.log('[GET /admin/memberships] Attempting database query...');
-        const [memberships] = await db.query(`
-            SELECT 
-                m.id as membership_id, 
-                m.user_id, 
-                u.first_name as user_first_name, 
-                u.last_name as user_last_name, 
-                u.email as user_email, 
-                m.type, 
-                m.start_date, 
-                m.end_date, 
-                m.status, 
-                m.auto_renew 
-            FROM memberships m
-            JOIN users u ON m.user_id = u.id
-            ORDER BY m.start_date DESC
-        `);
-        
-        // Log successful query result
-        console.log(`[GET /admin/memberships] Database query successful. Found ${memberships.length} memberships.`);
-        
-        // Log before sending response
-        console.log('[GET /admin/memberships] Sending successful response.');
-        res.json(memberships);
-    } catch (error) {
-        // Log the specific error encountered
-        console.error('[GET /admin/memberships] <<<< DATABASE QUERY OR PROCESSING ERROR >>>>', error); 
-        res.status(500).json({ message: 'Error fetching memberships' });
-    }
-});
-
-// Initialize membership tiers directly
-router.post('/initialize-membership-tiers', async (req, res) => {
-    try {
-        console.log('[POST /admin/initialize-membership-tiers] Creating and populating membership_tiers table');
-        
-        // Drop the table if it exists but is problematic
-        // await db.query('DROP TABLE IF EXISTS membership_tiers');
-        // console.log('[POST /admin/initialize-membership-tiers] Dropped existing table to recreate it');
-        
-        // First, check if table exists
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS membership_tiers (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                type VARCHAR(50) NOT NULL UNIQUE,
-                name VARCHAR(100) NOT NULL,
-                description TEXT,
-                price DECIMAL(10,2) NOT NULL,
-                benefits JSON,
-                is_active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )
-        `);
-        
-        console.log('[POST /admin/initialize-membership-tiers] Table exists or was created');
-        
-        try {
-            // Check if there are any existing tiers
-            const [existingTiers] = await db.query('SELECT COUNT(*) as count FROM membership_tiers');
-            console.log(`[POST /admin/initialize-membership-tiers] Found ${existingTiers[0].count} existing tiers`);
-            
-            if (existingTiers[0].count === 0) {
-                console.log('[POST /admin/initialize-membership-tiers] No existing tiers found, creating defaults');
-                
-                // Insert default tiers
-                await db.query(`
-                    INSERT INTO membership_tiers (type, name, description, price, benefits, is_active)
-                    VALUES 
-                    (?, ?, ?, ?, ?, ?),
-                    (?, ?, ?, ?, ?, ?),
-                    (?, ?, ?, ?, ?, ?)
-                `, [
-                    'basic', 'Basic', 'Standard membership with basic benefits', 9.99, 
-                    JSON.stringify(['5% discount on rentals', 'Basic insurance coverage', 'Standard booking priority']), 
-                    true,
-                    'premium', 'Premium', 'Enhanced membership with priority booking', 19.99, 
-                    JSON.stringify(['10% discount on rentals', 'Enhanced insurance coverage', 'Priority booking', '24/7 customer support']), 
-                    true,
-                    'platinum', 'Platinum', 'Premium membership with all benefits', 29.99, 
-                    JSON.stringify(['15% discount on rentals', 'Premium insurance coverage', 'VIP booking priority', 'Dedicated customer support', 'Free cancellations']), 
-                    true
-                ]);
-                
-                console.log('[POST /admin/initialize-membership-tiers] Default tiers created');
-                
-                // Verify the tiers were created
-                const [verifyTiers] = await db.query('SELECT COUNT(*) as count FROM membership_tiers');
-                console.log(`[POST /admin/initialize-membership-tiers] After insertion, found ${verifyTiers[0].count} tiers`);
-                
-                res.status(201).json({ 
-                    message: 'Membership tiers initialized successfully',
-                    count: verifyTiers[0].count 
-                });
-            } else {
-                console.log('[POST /admin/initialize-membership-tiers] Tiers already exist');
-                res.status(200).json({ 
-                    message: 'Membership tiers already exist',
-                    count: existingTiers[0].count 
-                });
-            }
-        } catch (sqlError) {
-            console.error('[POST /admin/initialize-membership-tiers] SQL Error:', sqlError);
-            res.status(500).json({ 
-                message: 'SQL Error during tier initialization', 
-                error: sqlError.message,
-                sqlState: sqlError.sqlState,
-                sqlCode: sqlError.code
-            });
-        }
-    } catch (error) {
-        console.error('[POST /admin/initialize-membership-tiers] Error:', error);
-        res.status(500).json({ message: 'Error initializing membership tiers', error: error.message });
-    }
-});
-
-// Get all membership tiers
-router.get('/membership-tiers', async (req, res) => {
-    try {
-        console.log('[GET /admin/membership-tiers] Handler entered');
-        
-        // Check if the membership_tiers table exists, if not create it
-        const [tables] = await db.query(`
-            SELECT TABLE_NAME 
-            FROM information_schema.TABLES 
-            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'membership_tiers'
-        `, [process.env.DB_NAME || 'car_sharing_db']);
-        
-        console.log(`[GET /admin/membership-tiers] Table check result: ${tables.length} tables found`);
-        
-        if (tables.length === 0) {
-            console.log('[GET /admin/membership-tiers] Creating membership_tiers table as it does not exist');
-            // Create the membership_tiers table if it doesn't exist
-            await db.query(`
-                CREATE TABLE membership_tiers (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    type VARCHAR(50) NOT NULL UNIQUE,
-                    name VARCHAR(100) NOT NULL,
-                    description TEXT,
-                    price DECIMAL(10,2) NOT NULL,
-                    benefits JSON,
-                    is_active BOOLEAN DEFAULT TRUE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                )
-            `);
-            
-            console.log('[GET /admin/membership-tiers] Inserting default membership tiers');
-            // Insert default tiers
-            await db.query(`
-                INSERT INTO membership_tiers (type, name, description, price, benefits, is_active)
-                VALUES 
-                (?, ?, ?, ?, ?, ?),
-                (?, ?, ?, ?, ?, ?),
-                (?, ?, ?, ?, ?, ?)
-            `, [
-                'basic', 'Basic', 'Standard membership with basic benefits', 9.99, 
-                JSON.stringify(['5% discount on rentals', 'Basic insurance coverage', 'Standard booking priority']), 
-                true,
-                'premium', 'Premium', 'Enhanced membership with priority booking', 19.99, 
-                JSON.stringify(['10% discount on rentals', 'Enhanced insurance coverage', 'Priority booking', '24/7 customer support']), 
-                true,
-                'platinum', 'Platinum', 'Premium membership with all benefits', 29.99, 
-                JSON.stringify(['15% discount on rentals', 'Premium insurance coverage', 'VIP booking priority', 'Dedicated customer support', 'Free cancellations']), 
-                true
-            ]);
-        } else {
-            console.log('[GET /admin/membership-tiers] membership_tiers table exists');
-        }
-        
-        // Get all membership tiers
-        const [tiers] = await db.query(`
-            SELECT * FROM membership_tiers
-            ORDER BY price ASC
-        `);
-        
-        console.log(`[GET /admin/membership-tiers] Found ${tiers.length} tiers in raw form`);
-        
-        if (tiers.length === 0) {
-            console.log('[GET /admin/membership-tiers] No tiers found, inserting defaults');
-            
-            // Insert default tiers if none exist
-            await db.query(`
-                INSERT INTO membership_tiers (type, name, description, price, benefits, is_active)
-                VALUES 
-                (?, ?, ?, ?, ?, ?),
-                (?, ?, ?, ?, ?, ?),
-                (?, ?, ?, ?, ?, ?)
-            `, [
-                'basic', 'Basic', 'Standard membership with basic benefits', 9.99, 
-                JSON.stringify(['5% discount on rentals', 'Basic insurance coverage', 'Standard booking priority']), 
-                true,
-                'premium', 'Premium', 'Enhanced membership with priority booking', 19.99, 
-                JSON.stringify(['10% discount on rentals', 'Enhanced insurance coverage', 'Priority booking', '24/7 customer support']), 
-                true,
-                'platinum', 'Platinum', 'Premium membership with all benefits', 29.99, 
-                JSON.stringify(['15% discount on rentals', 'Premium insurance coverage', 'VIP booking priority', 'Dedicated customer support', 'Free cancellations']), 
-                true
-            ]);
-            
-            // Fetch tiers again after insertion
-            const [newTiers] = await db.query(`
-                SELECT * FROM membership_tiers
-                ORDER BY price ASC
-            `);
-            
-            console.log(`[GET /admin/membership-tiers] After insertion, found ${newTiers.length} membership tiers`);
-            
-            if (newTiers.length > 0) {
-                // Process benefits properly for each tier
-                const processedTiers = newTiers.map(tier => {
-                    // Make a copy of the tier to avoid modifying the original
-                    const processedTier = {...tier};
-                    
-                    // Check if benefits is already a parsed object or a string
-                    if (typeof processedTier.benefits === 'string') {
-                        try {
-                            processedTier.benefits = JSON.parse(processedTier.benefits);
-                        } catch (err) {
-                            console.error(`[GET /admin/membership-tiers] Error parsing benefits for tier ${processedTier.id}:`, err);
-                            processedTier.benefits = []; // Default to empty array if parsing fails
-                        }
-                    }
-                    
-                    return processedTier;
-                });
-                
-                console.log(`[GET /admin/membership-tiers] Returning ${processedTiers.length} processed tiers`);
-                return res.json(processedTiers);
-            }
-        }
-        
-        // Process benefits properly for each tier
-        const processedTiers = tiers.map(tier => {
-            // Make a copy of the tier to avoid modifying the original
-            const processedTier = {...tier};
-            
-            // Check if benefits is already a parsed object or a string
-            if (typeof processedTier.benefits === 'string') {
-                try {
-                    processedTier.benefits = JSON.parse(processedTier.benefits);
-                } catch (err) {
-                    console.error(`[GET /admin/membership-tiers] Error parsing benefits for tier ${processedTier.id}:`, err);
-                    processedTier.benefits = []; // Default to empty array if parsing fails
-                }
-            }
-            
-            return processedTier;
-        });
-        
-        console.log(`[GET /admin/membership-tiers] Returning ${processedTiers.length} processed tiers`);
-        res.json(processedTiers);
-    } catch (error) {
-        console.error('[GET /admin/membership-tiers] Error:', error);
-        res.status(500).json({ message: 'Error fetching membership tiers', error: error.message });
-    }
-});
-
-// Create a new membership tier
-router.post('/membership-tiers', async (req, res) => {
-    try {
-        const { type, name, description, price, benefits, is_active } = req.body;
-        
-        // Validate required fields
-        if (!type || !name || price === undefined) {
-            return res.status(400).json({ message: 'Type, name, and price are required' });
-        }
-        
-        // Check if type already exists
-        const [existing] = await db.query('SELECT id FROM membership_tiers WHERE type = ?', [type]);
-        if (existing.length > 0) {
-            return res.status(400).json({ message: 'Membership tier with this type already exists' });
-        }
-        
-        // Insert new tier
-        const [result] = await db.query(`
-            INSERT INTO membership_tiers (type, name, description, price, benefits, is_active)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `, [
-            type, 
-            name, 
-            description || '', 
-            price, 
-            JSON.stringify(benefits || []), 
-            is_active !== undefined ? is_active : true
-        ]);
-        
-        res.status(201).json({ 
-            id: result.insertId,
-            message: 'Membership tier created successfully' 
-        });
-    } catch (error) {
-        console.error('Error creating membership tier:', error);
-        res.status(500).json({ message: 'Error creating membership tier' });
-    }
-});
-
-// Update a membership tier
-router.put('/membership-tiers/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { type, name, description, price, benefits, is_active } = req.body;
-        
-        // Check if tier exists
-        const [existing] = await db.query('SELECT id FROM membership_tiers WHERE id = ?', [id]);
-        if (existing.length === 0) {
-            return res.status(404).json({ message: 'Membership tier not found' });
-        }
-        
-        // If changing type, check if new type already exists (for another tier)
-        if (type) {
-            const [typeExists] = await db.query(
-                'SELECT id FROM membership_tiers WHERE type = ? AND id != ?', 
-                [type, id]
-            );
-            if (typeExists.length > 0) {
-                return res.status(400).json({ message: 'Another tier with this type already exists' });
-            }
-        }
-        
-        // Prepare update data
-        const updates = {};
-        if (type) updates.type = type;
-        if (name) updates.name = name;
-        if (description !== undefined) updates.description = description;
-        if (price !== undefined) updates.price = price;
-        if (benefits) updates.benefits = JSON.stringify(benefits);
-        if (is_active !== undefined) updates.is_active = is_active;
-        
-        // Update tier
-        await db.query(
-            'UPDATE membership_tiers SET ? WHERE id = ?',
-            [updates, id]
-        );
-        
-        res.json({ message: 'Membership tier updated successfully' });
-    } catch (error) {
-        console.error('Error updating membership tier:', error);
-        res.status(500).json({ message: 'Error updating membership tier' });
-    }
-});
-
-// Update membership status
-router.put('/memberships/:id/status', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status } = req.body;
-        
-        // Validate status
-        const validStatuses = ['active', 'expired', 'cancelled'];
-        if (!validStatuses.includes(status)) {
-            return res.status(400).json({ 
-                message: 'Invalid status value',
-                validStatuses 
-            });
-        }
-        
-        // Update membership status
-        const [result] = await db.query(
-            'UPDATE memberships SET status = ? WHERE id = ?',
-            [status, id]
-        );
-        
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Membership not found' });
-        }
-        
-        // If cancelling, also set auto_renew to false
-        if (status === 'cancelled') {
-            await db.query(
-                'UPDATE memberships SET auto_renew = FALSE WHERE id = ?',
-                [id]
-            );
-        }
-        
-        res.json({ message: 'Membership status updated successfully' });
-    } catch (error) {
-        console.error('Error updating membership status:', error);
-        res.status(500).json({ message: 'Error updating membership status' });
-    }
-});
-
-// Update booking status
-router.put('/bookings/:id/status', async (req, res) => {
-    const connection = await db.getConnection();
-    
-    try {
-        const { id } = req.params;
-        const { status } = req.body;
-
-        // Validate status value
-        const validStatuses = ['pending', 'confirmed', 'completed', 'cancelled'];
-        if (!validStatuses.includes(status)) {
-            return res.status(400).json({ 
-                message: 'Invalid status value',
-                validStatuses
-            });
-        }
-
-        // Start transaction
-        await connection.beginTransaction();
-
-        // Update booking status
-        await connection.query('UPDATE bookings SET status = ? WHERE id = ?', [status, id]);
-
-        // If booking is cancelled, update car availability
-        if (status === 'cancelled') {
-            const [booking] = await connection.query('SELECT car_id FROM bookings WHERE id = ?', [id]);
-            if (booking.length) {
-                await connection.query(
-                    'UPDATE cars SET availability_status = ? WHERE id = ?',
-                    ['available', booking[0].car_id]
-                );
-            }
-        }
-
-        // Commit transaction
-        await connection.commit();
-        res.json({ message: 'Booking status updated successfully' });
-    } catch (error) {
-        // Rollback in case of error
-        await connection.rollback();
-        console.error('Error updating booking status:', error);
-        res.status(500).json({ 
-            message: 'Error updating booking status',
-            error: error.message 
-        });
-    } finally {
-        connection.release();
     }
 });
 
@@ -1353,7 +809,395 @@ router.get('/dashboard', async (req, res) => {
     }
 });
 
-// Debug endpoint - directly return membership tiers
+// Get all memberships with user details (admin view)
+router.get('/memberships', async (req, res) => {
+    // Log entry point and confirmed user
+    console.log(`[GET /admin/memberships] Handler entered. User: ${req.user?.email}, Role: ${req.user?.role}`); 
+    
+    try {
+        console.log('[GET /admin/memberships] Attempting database query...');
+        const [memberships] = await db.query(`
+            SELECT 
+                m.id as membership_id, 
+                m.user_id, 
+                u.first_name as user_first_name, 
+                u.last_name as user_last_name, 
+                u.email as user_email, 
+                m.type, 
+                m.start_date, 
+                m.end_date, 
+                m.status, 
+                m.auto_renew 
+            FROM memberships m
+            JOIN users u ON m.user_id = u.id
+            ORDER BY m.start_date DESC
+        `);
+        
+        // Log successful query result
+        console.log(`[GET /admin/memberships] Database query successful. Found ${memberships.length} memberships.`);
+        
+        // Log before sending response
+        console.log('[GET /admin/memberships] Sending successful response.');
+        res.json(memberships);
+    } catch (error) {
+        // Log the specific error encountered
+        console.error('[GET /admin/memberships] <<<< DATABASE QUERY OR PROCESSING ERROR >>>>', error); 
+        res.status(500).json({ message: 'Error fetching memberships' });
+    }
+});
+
+// Update membership status
+router.put('/memberships/:id/status', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+        
+        // Validate status
+        const validStatuses = ['active', 'expired', 'cancelled'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ 
+                message: 'Invalid status value',
+                validStatuses 
+            });
+        }
+        
+        // Update membership status
+        const [result] = await db.query(
+            'UPDATE memberships SET status = ? WHERE id = ?',
+            [status, id]
+        );
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Membership not found' });
+        }
+        
+        // If cancelling, also set auto_renew to false
+        if (status === 'cancelled') {
+            await db.query(
+                'UPDATE memberships SET auto_renew = FALSE WHERE id = ?',
+                [id]
+            );
+        }
+        
+        res.json({ message: 'Membership status updated successfully' });
+    } catch (error) {
+        console.error('Error updating membership status:', error);
+        res.status(500).json({ message: 'Error updating membership status' });
+    }
+});
+
+// Get all membership tiers
+router.get('/membership-tiers', async (req, res) => {
+    try {
+        console.log('[GET /admin/membership-tiers] Handler entered');
+        
+        // Check if the membership_tiers table exists, if not create it
+        const [tables] = await db.query(`
+            SELECT TABLE_NAME 
+            FROM information_schema.TABLES 
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'membership_tiers'
+        `, [process.env.DB_NAME || 'car_sharing_db']);
+        
+        console.log(`[GET /admin/membership-tiers] Table check result: ${tables.length} tables found`);
+        
+        if (tables.length === 0) {
+            console.log('[GET /admin/membership-tiers] Creating membership_tiers table as it does not exist');
+            // Create the membership_tiers table if it doesn't exist
+            await db.query(`
+                CREATE TABLE membership_tiers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    type VARCHAR(50) NOT NULL UNIQUE,
+                    name VARCHAR(100) NOT NULL,
+                    description TEXT,
+                    price DECIMAL(10,2) NOT NULL,
+                    benefits JSON,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+            `);
+            
+            console.log('[GET /admin/membership-tiers] Inserting default membership tiers');
+            // Insert default tiers
+            await db.query(`
+                INSERT INTO membership_tiers (type, name, description, price, benefits, is_active)
+                VALUES 
+                (?, ?, ?, ?, ?, ?),
+                (?, ?, ?, ?, ?, ?),
+                (?, ?, ?, ?, ?, ?)
+            `, [
+                'basic', 'Basic', 'Standard membership with basic benefits', 9.99, 
+                JSON.stringify(['5% discount on rentals', 'Basic insurance coverage', 'Standard booking priority']), 
+                true,
+                'premium', 'Premium', 'Enhanced membership with priority booking', 19.99, 
+                JSON.stringify(['10% discount on rentals', 'Enhanced insurance coverage', 'Priority booking', '24/7 customer support']), 
+                true,
+                'platinum', 'Platinum', 'Premium membership with all benefits', 29.99, 
+                JSON.stringify(['15% discount on rentals', 'Premium insurance coverage', 'VIP booking priority', 'Dedicated customer support', 'Free cancellations']), 
+                true
+            ]);
+        } else {
+            console.log('[GET /admin/membership-tiers] membership_tiers table exists');
+        }
+        
+        // Get all membership tiers
+        const [tiers] = await db.query(`
+            SELECT * FROM membership_tiers
+            ORDER BY price ASC
+        `);
+        
+        console.log(`[GET /admin/membership-tiers] Found ${tiers.length} tiers in raw form`);
+        
+        if (tiers.length === 0) {
+            console.log('[GET /admin/membership-tiers] No tiers found, inserting defaults');
+            
+            // Insert default tiers if none exist
+            await db.query(`
+                INSERT INTO membership_tiers (type, name, description, price, benefits, is_active)
+                VALUES 
+                (?, ?, ?, ?, ?, ?),
+                (?, ?, ?, ?, ?, ?),
+                (?, ?, ?, ?, ?, ?)
+            `, [
+                'basic', 'Basic', 'Standard membership with basic benefits', 9.99, 
+                JSON.stringify(['5% discount on rentals', 'Basic insurance coverage', 'Standard booking priority']), 
+                true,
+                'premium', 'Premium', 'Enhanced membership with priority booking', 19.99, 
+                JSON.stringify(['10% discount on rentals', 'Enhanced insurance coverage', 'Priority booking', '24/7 customer support']), 
+                true,
+                'platinum', 'Platinum', 'Premium membership with all benefits', 29.99, 
+                JSON.stringify(['15% discount on rentals', 'Premium insurance coverage', 'VIP booking priority', 'Dedicated customer support', 'Free cancellations']), 
+                true
+            ]);
+            
+            // Fetch tiers again after insertion
+            const [newTiers] = await db.query(`
+                SELECT * FROM membership_tiers
+                ORDER BY price ASC
+            `);
+            
+            console.log(`[GET /admin/membership-tiers] After insertion, found ${newTiers.length} membership tiers`);
+            
+            if (newTiers.length > 0) {
+                // Process benefits properly for each tier
+                const processedTiers = newTiers.map(tier => {
+                    // Make a copy of the tier to avoid modifying the original
+                    const processedTier = {...tier};
+                    
+                    // Check if benefits is already a parsed object or a string
+                    if (typeof processedTier.benefits === 'string') {
+                        try {
+                            processedTier.benefits = JSON.parse(processedTier.benefits);
+                        } catch (err) {
+                            console.error(`[GET /admin/membership-tiers] Error parsing benefits for tier ${processedTier.id}:`, err);
+                            processedTier.benefits = []; // Default to empty array if parsing fails
+                        }
+                    }
+                    
+                    return processedTier;
+                });
+                
+                console.log(`[GET /admin/membership-tiers] Returning ${processedTiers.length} processed tiers`);
+                return res.json(processedTiers);
+            }
+        }
+        
+        // Process benefits properly for each tier
+        const processedTiers = tiers.map(tier => {
+            // Make a copy of the tier to avoid modifying the original
+            const processedTier = {...tier};
+            
+            // Check if benefits is already a parsed object or a string
+            if (typeof processedTier.benefits === 'string') {
+                try {
+                    processedTier.benefits = JSON.parse(processedTier.benefits);
+                } catch (err) {
+                    console.error(`[GET /admin/membership-tiers] Error parsing benefits for tier ${processedTier.id}:`, err);
+                    processedTier.benefits = []; // Default to empty array if parsing fails
+                }
+            }
+            
+            return processedTier;
+        });
+        
+        console.log(`[GET /admin/membership-tiers] Returning ${processedTiers.length} processed tiers`);
+        res.json(processedTiers);
+    } catch (error) {
+        console.error('[GET /admin/membership-tiers] Error:', error);
+        res.status(500).json({ message: 'Error fetching membership tiers', error: error.message });
+    }
+});
+
+// Create a new membership tier
+router.post('/membership-tiers', async (req, res) => {
+    try {
+        const { type, name, description, price, benefits, is_active } = req.body;
+        
+        // Validate required fields
+        if (!type || !name || price === undefined) {
+            return res.status(400).json({ message: 'Type, name, and price are required' });
+        }
+        
+        // Check if type already exists
+        const [existing] = await db.query('SELECT id FROM membership_tiers WHERE type = ?', [type]);
+        if (existing.length > 0) {
+            return res.status(400).json({ message: 'Membership tier with this type already exists' });
+        }
+        
+        // Insert new tier
+        const [result] = await db.query(`
+            INSERT INTO membership_tiers (type, name, description, price, benefits, is_active)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `, [
+            type, 
+            name, 
+            description || '', 
+            price, 
+            JSON.stringify(benefits || []), 
+            is_active !== undefined ? is_active : true
+        ]);
+        
+        res.status(201).json({ 
+            id: result.insertId,
+            message: 'Membership tier created successfully' 
+        });
+    } catch (error) {
+        console.error('Error creating membership tier:', error);
+        res.status(500).json({ message: 'Error creating membership tier' });
+    }
+});
+
+// Update a membership tier
+router.put('/membership-tiers/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { type, name, description, price, benefits, is_active } = req.body;
+        
+        // Check if tier exists
+        const [existing] = await db.query('SELECT id FROM membership_tiers WHERE id = ?', [id]);
+        if (existing.length === 0) {
+            return res.status(404).json({ message: 'Membership tier not found' });
+        }
+        
+        // If changing type, check if new type already exists (for another tier)
+        if (type) {
+            const [typeExists] = await db.query(
+                'SELECT id FROM membership_tiers WHERE type = ? AND id != ?', 
+                [type, id]
+            );
+            if (typeExists.length > 0) {
+                return res.status(400).json({ message: 'Another tier with this type already exists' });
+            }
+        }
+        
+        // Prepare update data
+        const updates = {};
+        if (type) updates.type = type;
+        if (name) updates.name = name;
+        if (description !== undefined) updates.description = description;
+        if (price !== undefined) updates.price = price;
+        if (benefits) updates.benefits = JSON.stringify(benefits);
+        if (is_active !== undefined) updates.is_active = is_active;
+        
+        // Update tier
+        await db.query(
+            'UPDATE membership_tiers SET ? WHERE id = ?',
+            [updates, id]
+        );
+        
+        res.json({ message: 'Membership tier updated successfully' });
+    } catch (error) {
+        console.error('Error updating membership tier:', error);
+        res.status(500).json({ message: 'Error updating membership tier' });
+    }
+});
+
+// Initialize membership tiers directly (Consider removing if not needed long-term)
+router.post('/initialize-membership-tiers', async (req, res) => {
+    try {
+        console.log('[POST /admin/initialize-membership-tiers] Creating and populating membership_tiers table');
+        
+        // Drop the table if it exists but is problematic
+        // await db.query('DROP TABLE IF EXISTS membership_tiers');
+        // console.log('[POST /admin/initialize-membership-tiers] Dropped existing table to recreate it');
+        
+        // First, check if table exists
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS membership_tiers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                type VARCHAR(50) NOT NULL UNIQUE,
+                name VARCHAR(100) NOT NULL,
+                description TEXT,
+                price DECIMAL(10,2) NOT NULL,
+                benefits JSON,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        `);
+        
+        console.log('[POST /admin/initialize-membership-tiers] Table exists or was created');
+        
+        try {
+            // Check if there are any existing tiers
+            const [existingTiers] = await db.query('SELECT COUNT(*) as count FROM membership_tiers');
+            console.log(`[POST /admin/initialize-membership-tiers] Found ${existingTiers[0].count} existing tiers`);
+            
+            if (existingTiers[0].count === 0) {
+                console.log('[POST /admin/initialize-membership-tiers] No existing tiers found, creating defaults');
+                
+                // Insert default tiers
+                await db.query(`
+                    INSERT INTO membership_tiers (type, name, description, price, benefits, is_active)
+                    VALUES 
+                    (?, ?, ?, ?, ?, ?),
+                    (?, ?, ?, ?, ?, ?),
+                    (?, ?, ?, ?, ?, ?)
+                `, [
+                    'basic', 'Basic', 'Standard membership with basic benefits', 9.99, 
+                    JSON.stringify(['5% discount on rentals', 'Basic insurance coverage', 'Standard booking priority']), 
+                    true,
+                    'premium', 'Premium', 'Enhanced membership with priority booking', 19.99, 
+                    JSON.stringify(['10% discount on rentals', 'Enhanced insurance coverage', 'Priority booking', '24/7 customer support']), 
+                    true,
+                    'platinum', 'Platinum', 'Premium membership with all benefits', 29.99, 
+                    JSON.stringify(['15% discount on rentals', 'Premium insurance coverage', 'VIP booking priority', 'Dedicated customer support', 'Free cancellations']), 
+                    true
+                ]);
+                
+                console.log('[POST /admin/initialize-membership-tiers] Default tiers created');
+                
+                // Verify the tiers were created
+                const [verifyTiers] = await db.query('SELECT COUNT(*) as count FROM membership_tiers');
+                console.log(`[POST /admin/initialize-membership-tiers] After insertion, found ${verifyTiers[0].count} tiers`);
+                
+                res.status(201).json({ 
+                    message: 'Membership tiers initialized successfully',
+                    count: verifyTiers[0].count 
+                });
+            } else {
+                console.log('[POST /admin/initialize-membership-tiers] Tiers already exist');
+                res.status(200).json({ 
+                    message: 'Membership tiers already exist',
+                    count: existingTiers[0].count 
+                });
+            }
+        } catch (sqlError) {
+            console.error('[POST /admin/initialize-membership-tiers] SQL Error:', sqlError);
+            res.status(500).json({ 
+                message: 'SQL Error during tier initialization', 
+                error: sqlError.message,
+                sqlState: sqlError.sqlState,
+                sqlCode: sqlError.code
+            });
+        }
+    } catch (error) {
+        console.error('[POST /admin/initialize-membership-tiers] Error:', error);
+        res.status(500).json({ message: 'Error initializing membership tiers', error: error.message });
+    }
+});
+
+// Debug endpoint - directly return membership tiers (Consider removing)
 router.get('/membership-tiers-debug', async (req, res) => {
     try {
         console.log('[GET /admin/membership-tiers-debug] Debug endpoint called');
@@ -1399,25 +1243,25 @@ router.get('/membership-tiers-debug', async (req, res) => {
     }
 });
 
-// Delete a user
-router.delete('/users/:id', async (req, res) => {
+// Get user activity logs
+router.get('/users/:id/logs', async (req, res) => {
     try {
-        const { id } = req.params;
-
-        // Optional: Check if user exists before deleting
-        const [user] = await db.query('SELECT id FROM users WHERE id = ?', [id]);
-        if (user.length === 0) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        // You might want to prevent deleting admins, add check here if needed
-
-        await db.query('DELETE FROM users WHERE id = ?', [id]);
-        res.json({ message: 'User deleted successfully' });
+        const [logs] = await db.query(
+            'SELECT * FROM user_activity_logs WHERE user_id = ? ORDER BY timestamp DESC',
+            [req.params.id]
+        );
+        res.json(logs);
     } catch (error) {
-        console.error('Error deleting user:', error);
-        // Provide more specific error if FK constraint fails, etc.
-        res.status(500).json({ message: 'Error deleting user' });
+        console.error('Error fetching user logs:', error);
+        res.status(500).json({ message: 'Error fetching user logs' });
     }
 });
+
+router.route('/users')
+    .get(getAllUsers);
+
+router.route('/users/:id')
+    .get(getUserByIdAdmin)
+    .put(updateUserAdmin);
 
 module.exports = router; 

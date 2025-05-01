@@ -114,8 +114,8 @@ class Help {
                         INSERT INTO support_tickets (user_id, subject, description, status, priority) VALUES
                         (?, 'Unable to complete booking', 'I keep getting an error when trying to finalize my booking. The error says "Payment processing failed".', 'open', 'high'),
                         (?, 'Car location incorrect', 'The car was not at the location shown in the app. I had to walk 2 blocks to find it.', 'open', 'medium'),
-                        (?, 'Refund request for cancelled trip', 'I cancelled my trip due to emergency but haven\'t received a refund yet. Booking #A12345.', 'in_progress', 'medium'),
-                        (?, 'Damaged car report', 'The car I rented had a scratch on the passenger door that wasn\'t noted in the app.', 'resolved', 'low'),
+                        (?, 'Refund request for cancelled trip', 'I cancelled my trip due to emergency but haven''t received a refund yet. Booking #A12345.', 'in_progress', 'medium'),
+                        (?, 'Damaged car report', 'The car I rented had a scratch on the passenger door that wasn''t noted in the app.', 'resolved', 'low'),
                         (?, 'App not working properly', 'The mobile app keeps crashing when I try to view available cars in my area.', 'open', 'high')
                     `, [userId, userId, userId, userId, userId]);
                 }

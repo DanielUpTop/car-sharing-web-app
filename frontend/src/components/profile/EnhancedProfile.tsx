@@ -21,6 +21,7 @@ import {
     AppBar,
     Toolbar,
     IconButton,
+    InputAdornment,
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
@@ -32,6 +33,7 @@ import {
     ContactEmergency,
     DarkMode,
     ArrowBack,
+    Person,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { isFuture, startOfDay } from 'date-fns';
@@ -56,7 +58,7 @@ interface UserProfile {
     country: string;
     preferred_payment_method: string;
     emergency_contact_name: string;
-    emergency_contact_phone: string;
+    emergency_contact_number: string;
     driving_license_expiry: Date | null;
     driving_license_country: string;
 }
@@ -93,7 +95,7 @@ const EnhancedProfile = () => {
         country: '',
         preferred_payment_method: '',
         emergency_contact_name: '',
-        emergency_contact_phone: '',
+        emergency_contact_number: '',
         driving_license_expiry: null,
         driving_license_country: '',
     });
@@ -139,7 +141,7 @@ const EnhancedProfile = () => {
                 country: data.country || '',
                 preferred_payment_method: data.preferred_payment_method || '',
                 emergency_contact_name: data.emergency_contact_name || '',
-                emergency_contact_phone: data.emergency_contact_phone || '',
+                emergency_contact_number: data.emergency_contact_number || '',
                 driving_license_country: data.driving_license_country || '',
             });
         } catch (err) {
@@ -380,9 +382,9 @@ const EnhancedProfile = () => {
                             <Grid item xs={12} sm={6}>
                                 <TextField
                                     fullWidth
-                                    label="Emergency Contact Phone"
-                                    value={profile.emergency_contact_phone}
-                                    onChange={(e) => setProfile({ ...profile, emergency_contact_phone: e.target.value })}
+                                    label="Emergency Contact Number"
+                                    value={profile.emergency_contact_number}
+                                    onChange={(e) => setProfile({ ...profile, emergency_contact_number: e.target.value })}
                                     disabled={!isEditing}
                                 />
                             </Grid>

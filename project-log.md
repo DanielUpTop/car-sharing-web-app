@@ -703,11 +703,18 @@ Updated SQL schema for better data relationships
         - Implemented a new map style and adjustments to make it more professional and UX friendly. 
         - Integrated membership requirement checks directly into the 'Select car' button handlers for both the map markers and the list view. The buttons now dynamically change color (blue, orange, or light blue) and text ('Select car' or 'Requires [Membership]') based on user membership sufficiency, while remaining clickable. Clicking triggers either the booking dialog or a 'Membership Required' dialog managed centrally in MapView. Additionally, adjusted the layout of the car list items to improve readability, allowing text like car names and addresses to wrap and preventing elements from appearing squashed.
 
-## Notes
-- Regular code reviews and pair programming for critical features
-- Continuous integration with automated testing
-- Documentation of API endpoints and key workflows
-- Regular security audits and dependency updates
+### April 30th, 2024.
+   Membership Payment System Implemented
+- Used Stripe to implement payment methods in order to purchase a membership for users
+- When the user succesfully makes the payment and it's accepted, they are granted the membership, giving them access to it with the power in their hands to cancel if they like.
+-Overall fixed bugs and enhanced the website for better UX features. 
+
+### May 1st, 2024.
+   User Management Fix & Improvements
+- The Admin is able to deactivate counts, which a deactivated user can't log in and gets a system message
+- The Admin can delete accounts for good. 
+- The Admin can change the User details when required and make edits, and changes to them.
+
 
 ## Technical Architecture Overview
 The Car Sharing Web Application follows a modern full-stack architecture:

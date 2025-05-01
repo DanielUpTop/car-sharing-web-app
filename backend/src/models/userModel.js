@@ -18,6 +18,8 @@ class User {
                 address VARCHAR(255),
                 city VARCHAR(100),
                 postcode VARCHAR(20),
+                emergency_contact_name VARCHAR(100),
+                emergency_contact_number VARCHAR(20),
                 role ENUM('admin', 'rentee') DEFAULT 'rentee',
                 status ENUM('active', 'blocked') DEFAULT 'active',
                 is_verified BOOLEAN DEFAULT FALSE,
@@ -29,7 +31,7 @@ class User {
         
         try {
             await db.query(query);
-            console.log('Users table created or already exists successfully');
+            console.log('Users table definition includes emergency contacts.');
         } catch (error) {
             console.error('Error creating users table:', error);
             throw error;
@@ -49,6 +51,8 @@ class User {
         city,
         postcode,
         driving_license_country,
+        emergency_contact_name,
+        emergency_contact_number,
         verification_token, 
         is_verified = false 
     }) {
@@ -69,10 +73,12 @@ class User {
                 address,
                 city,
                 postcode,
+                emergency_contact_name,
+                emergency_contact_number,
                 verification_token,
                 is_verified
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         
         try {
@@ -89,6 +95,8 @@ class User {
                 address,
                 city,
                 postcode,
+                emergency_contact_name,
+                emergency_contact_number,
                 verification_token,
                 is_verified
             ]);
@@ -143,7 +151,9 @@ class User {
             SELECT 
                 id, first_name, last_name, email, phone_number, 
                 driving_license, date_of_birth, driving_license_expiry, 
-                driving_license_country, address, city, postcode, role, status, is_verified, 
+                driving_license_country, address, city, postcode, 
+                emergency_contact_name, emergency_contact_number,
+                role, status, is_verified, 
                 created_at, updated_at 
             FROM users 
             WHERE id = ?
@@ -177,7 +187,9 @@ class User {
             address, 
             city, 
             postcode, 
-            driving_license_country 
+            driving_license_country,
+            emergency_contact_name,
+            emergency_contact_number
         } = userData;
 
         // Construct the SET part of the query dynamically based on provided fields
@@ -196,7 +208,9 @@ class User {
                 driving_license_country = ?, 
                 address = ?, 
                 city = ?, 
-                postcode = ?
+                postcode = ?,
+                emergency_contact_name = ?,
+                emergency_contact_number = ?
             WHERE id = ?
         `;
 
@@ -213,6 +227,8 @@ class User {
                 address,
                 city,
                 postcode,
+                emergency_contact_name,
+                emergency_contact_number,
                 userId
             ]);
             return result.affectedRows > 0;
@@ -328,19 +344,41 @@ class User {
      * @returns {Promise<Object|null>} User object or null if not found
      */
     static async getUserById(id) {
-        return new Promise((resolve, reject) => {
-            const query = 'SELECT * FROM users WHERE id = ?';
-            db.query(query, [id], (err, results) => {
-                if (err) {
-                    console.error('Error fetching user by ID:', err);
-                    return reject(err);
-                }
-                if (results.length === 0) {
-                    return resolve(null);
-                }
-                resolve(results[0]);
-            });
-        });
+        const query = `
+            SELECT 
+                u.id, u.first_name, u.last_name, u.email, u.phone_number, 
+                u.driving_license, u.date_of_birth, u.driving_license_expiry, 
+                u.driving_license_country, u.address, u.city, u.postcode,
+                u.emergency_contact_name, u.emergency_contact_number,
+                u.role, u.status, u.is_verified, u.created_at, u.updated_at,
+                m.tier as membership_tier, m.start_date as membership_start_date, m.end_date as membership_end_date, m.status as membership_status,
+                ins.policy_number as insurance_policy_number, ins.coverage_type as insurance_coverage_type, 
+                ins.start_date as insurance_start_date, ins.end_date as insurance_end_date, ins.status as insurance_status
+            FROM users u
+            LEFT JOIN memberships m ON u.id = m.user_id
+            LEFT JOIN insurance ins ON u.id = ins.user_id
+            WHERE u.id = ?
+        `;
+         try {
+             const [rows] = await db.query(query, [id]);
+             if (rows.length === 0) {
+                 return null;
+             }
+             // Basic date formatting/conversion if needed
+             const user = rows[0];
+             if (user.date_of_birth && typeof user.date_of_birth === 'string') {
+                 user.date_of_birth = new Date(user.date_of_birth);
+             }
+             if (user.driving_license_expiry && typeof user.driving_license_expiry === 'string') {
+                 user.driving_license_expiry = new Date(user.driving_license_expiry);
+             }
+              // Format other date fields if necessary (membership, insurance)
+             // ... 
+             return user;
+         } catch (error) {
+             console.error('Error getting user by ID with details:', error);
+             throw error;
+         }
     }
 
     /**
@@ -349,19 +387,23 @@ class User {
      * @returns {Promise<Object|null>} User object or null if not found
      */
     static async getUserByEmail(email) {
-        return new Promise((resolve, reject) => {
-            const query = 'SELECT * FROM users WHERE email = ?';
-            db.query(query, [email], (err, results) => {
-                if (err) {
-                    console.error('Error fetching user by email:', err);
-                    return reject(err);
-                }
-                if (results.length === 0) {
-                    return resolve(null);
-                }
-                resolve(results[0]);
-            });
-        });
+        const query = `
+            SELECT 
+                id, first_name, last_name, email, password, phone_number, 
+                driving_license, date_of_birth, driving_license_expiry, 
+                driving_license_country, address, city, postcode,
+                emergency_contact_name, emergency_contact_number,
+                role, status, is_verified, created_at, updated_at 
+            FROM users 
+            WHERE email = ?
+        `;
+        try {
+            const [rows] = await db.query(query, [email]);
+            return rows[0]; // Convert dates if needed, similar to findById
+        } catch (error) {
+            console.error('Error finding user by email:', error);
+            throw error;
+        }
     }
 
     /**
@@ -465,6 +507,83 @@ class User {
                 resolve(result.affectedRows > 0);
             });
         });
+    }
+
+    // New method to get all users for admin
+    static async getAll() {
+        const query = `
+            SELECT 
+                id, first_name, last_name, email, phone_number, 
+                driving_license, date_of_birth, driving_license_expiry, 
+                driving_license_country, address, city, postcode, 
+                emergency_contact_name, emergency_contact_number,
+                role, status, is_verified, 
+                created_at, updated_at 
+            FROM users 
+            ORDER BY last_name, first_name
+        `;
+        try {
+            const [rows] = await db.query(query);
+            return rows;
+        } catch (error) {
+            console.error('Error fetching all users:', error);
+            throw error;
+        }
+    }
+
+    // New method for admin updates
+    static async adminUpdateUser(userId, userData) {
+        // Define fields an admin can update
+        const allowedFields = [
+            'first_name', 'last_name', 'email', 'phone_number', 
+            'driving_license', 'date_of_birth', 'driving_license_expiry', 
+            'driving_license_country', 'address', 'city', 'postcode',
+            'emergency_contact_name', 'emergency_contact_number',
+            'role', 'status', 'is_verified'
+        ];
+
+        const fieldsToUpdate = {};
+        const queryParams = [];
+        let setClause = '';
+
+        // Build the SET clause dynamically only with allowed fields present in userData
+        allowedFields.forEach(field => {
+            if (userData[field] !== undefined) {
+                if (queryParams.length > 0) {
+                    setClause += ', ';
+                }
+                // Handle boolean conversion for is_verified
+                if (field === 'is_verified') {
+                    setClause += `${field} = ?`;
+                    queryParams.push(Boolean(userData[field]));
+                } else {
+                     setClause += `${field} = ?`;
+                     queryParams.push(userData[field]);
+                }
+            }
+        });
+
+        if (queryParams.length === 0) {
+            // No valid fields to update
+            console.log('Admin update user: No valid fields provided.');
+            return false; 
+        }
+
+        queryParams.push(userId); // Add userId for the WHERE clause
+
+        const query = `UPDATE users SET ${setClause} WHERE id = ?`;
+
+        try {
+            const [result] = await db.query(query, queryParams);
+            return result.affectedRows > 0;
+        } catch (error) {
+            console.error('Error updating user by admin:', error);
+            // Handle specific errors like duplicate email if necessary
+            if (error.code === 'ER_DUP_ENTRY') {
+                throw new Error('Email address already in use.');
+            }
+            throw error;
+        }
     }
 }
 

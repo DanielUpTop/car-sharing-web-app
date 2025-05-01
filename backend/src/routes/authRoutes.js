@@ -26,6 +26,8 @@ router.post('/register', async (req, res) => {
             city,                   // Added
             postcode,               // Added
             driving_license_country, // Added
+            emergency_contact_name, // Added
+            emergency_contact_number, // Added
             verificationToken 
         } = req.body;
 
@@ -36,10 +38,16 @@ router.post('/register', async (req, res) => {
         }
 
         // Validate required fields
-        const requiredFields = { first_name, last_name, email, password, phone_number, driving_license, date_of_birth, driving_license_expiry, address, city, postcode, driving_license_country, verificationToken };
+        const requiredFields = { 
+            first_name, last_name, email, password, phone_number, 
+            driving_license, date_of_birth, driving_license_expiry, address, city, 
+            postcode, driving_license_country, 
+            emergency_contact_name, emergency_contact_number, // Added check
+            verificationToken 
+        };
         for (const [key, value] of Object.entries(requiredFields)) {
             if (!value) {
-                const fieldName = key === 'driving_license_country' ? 'Driving License Country' : key.replace('_', ' ');
+                const fieldName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); 
                 return res.status(400).json({ message: `Field '${fieldName}' is required` });
             }
         }
@@ -64,6 +72,12 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ message: 'Driving License Expiry Date must be in the future.' });
         }
 
+        // Basic validation for emergency contact number format (similar to frontend)
+        const phoneRegex = /^\+?[0-9\s-]{10,15}$/;
+        if (!phoneRegex.test(emergency_contact_number)) {
+            return res.status(400).json({ message: 'Invalid Emergency Contact Number format.' });
+        }
+
         // Create new user
         const userId = await User.create({
             first_name,
@@ -78,6 +92,8 @@ router.post('/register', async (req, res) => {
             city,
             postcode,
             driving_license_country,
+            emergency_contact_name, // Added
+            emergency_contact_number, // Added
             verification_token: verificationToken,
             is_verified: false
         });
@@ -166,7 +182,13 @@ router.post('/login', async (req, res) => {
         }
 
         const user = users[0];
-        console.log('User found:', { id: user.id, email: user.email, role: user.role });
+        console.log('User found:', { id: user.id, email: user.email, role: user.role, status: user.status });
+
+        // Check if user account is blocked/deactivated
+        if (user.status === 'blocked') {
+            console.log('Login attempt failed: User account is blocked', { userId: user.id, email: user.email });
+            return res.status(403).json({ message: 'Account is deactivated/blocked' });
+        }
 
         // Check if email is verified (skip for admin users)
         if (!user.is_verified && user.role !== 'admin') {
