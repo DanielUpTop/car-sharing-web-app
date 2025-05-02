@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # Car Sharing Web Application
 
 A comprehensive car-sharing platform that allows users to rent vehicles through a user-friendly web interface. This project is developed as part of my final year university project.
@@ -143,4 +143,4 @@ This project is part of my university coursework and is not licensed for public 
 
 
 
-=======
+===============================================================================================================================================================================
