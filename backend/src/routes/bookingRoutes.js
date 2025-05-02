@@ -242,6 +242,39 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
             });
         }
         
+        // --- BEGIN REWARD POINT REFUND LOGIC ---
+        let pointsToRefund = 0;
+        // Only refund points if the booking was still PENDING when cancelled
+        if (booking[0].status === 'pending') {
+            // Check the reward_points_used column (assuming it exists now)
+            pointsToRefund = booking[0].reward_points_used || 0; // Default to 0 if null/undefined
+            
+            if (pointsToRefund > 0) {
+                console.log(`[Cancel Booking ${bookingId}] Pending booking cancelled with ${pointsToRefund} points used. Refunding points to user ${userId}.`);
+                // Add the points back to the user's balance
+                const [refundResult] = await connection.query(
+                    'UPDATE users SET reward_points = reward_points + ? WHERE id = ?',
+                    [pointsToRefund, userId]
+                );
+                if (refundResult.affectedRows === 0) {
+                    // Handle case where user might not be found (shouldn't happen ideally)
+                    console.error(`[Cancel Booking ${bookingId}] Failed to refund points: User ${userId} not found. Rolling back.`);
+                    await connection.rollback();
+                    return res.status(500).json({
+                        message: 'Failed to refund points: User not found.',
+                        success: false
+                    });
+                } else {
+                    console.log(`[Cancel Booking ${bookingId}] Successfully refunded ${pointsToRefund} points to user ${userId}.`);
+                }
+            } else {
+                 console.log(`[Cancel Booking ${bookingId}] Pending booking cancelled, but no reward points were recorded as used.`);
+            }
+        } else {
+            console.log(`[Cancel Booking ${bookingId}] Booking status was ${booking[0].status} (not pending), no points refunded.`);
+        }
+        // --- END REWARD POINT REFUND LOGIC ---
+
         // Check if user is eligible for free cancellation based on membership
         console.log(`[Cancel Booking ${bookingId}] Checking cancellation eligibility for user ${userId}.`);
         const eligibility = await Cancellation.checkEligibility(userId);

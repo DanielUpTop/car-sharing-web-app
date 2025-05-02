@@ -59,11 +59,33 @@ router.get('/membership-tiers', authenticateToken, async (req, res) => {
             ORDER BY price ASC
         `);
         
-        // Transform benefits from JSON string to array
-        const formattedTiers = tiers.map(tier => ({
-            ...tier,
-            benefits: JSON.parse(tier.benefits || '[]') // Ensure benefits is parsed correctly
-        }));
+        // Transform benefits: handle if it's already an array or needs parsing
+        const formattedTiers = tiers.map(tier => {
+            let finalBenefits = [];
+            
+            if (Array.isArray(tier.benefits)) {
+                // Already an array, use it directly
+                finalBenefits = tier.benefits;
+            } else if (typeof tier.benefits === 'string') {
+                // It's a string, try to parse it
+                try {
+                    finalBenefits = JSON.parse(tier.benefits || '[]');
+                } catch (parseError) {
+                    console.warn(`[Membership Tiers] Failed to parse benefits string for tier ${tier.id} (${tier.type}). Invalid JSON: ${tier.benefits}. Defaulting to empty array. Error: ${parseError.message}`);
+                    // Keep finalBenefits as []
+                }
+            } else {
+                 // It's null, undefined, or some other type - default to empty array
+                console.warn(`[Membership Tiers] Benefits for tier ${tier.id} (${tier.type}) is not an array or string (${typeof tier.benefits}). Defaulting to empty array.`);
+                finalBenefits = []; // Default
+            }
+            
+            return {
+                ...tier,
+                price: parseFloat(tier.price), // Keep price conversion
+                benefits: finalBenefits
+            };
+        });
         
         res.json(formattedTiers);
     } catch (error) {

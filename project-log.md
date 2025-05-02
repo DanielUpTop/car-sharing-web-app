@@ -715,6 +715,14 @@ Updated SQL schema for better data relationships
 - The Admin can delete accounts for good. 
 - The Admin can change the User details when required and make edits, and changes to them.
 
+### May 2nd, 2024.
+   Rewards Management Implementation & Final fixes
+- Users get a reward system for every booking they make which gives them discounts on their fares as a complimentary success gift for interactive with Car Share. 
+- Admin can manage Rewards management by distributing these points on their will if required
+- Overall bug fixes with Rewards Management implementation.
+- Overall bug fixes and code clean-up.
+
+
 
 ## Technical Architecture Overview
 The Car Sharing Web Application follows a modern full-stack architecture:

@@ -416,10 +416,8 @@ const InsuranceView = () => {
                 throw new Error(responseData.message || 'Failed to submit claim');
             }
 
-            // If there are files, upload them separately
+            
             if (selectedFiles && selectedFiles.length > 0) {
-                // If needed, you can upload files in a separate request
-                // This would depend on your backend API design
                 console.log(`${selectedFiles.length} files would be uploaded in a separate request`);
             }
 
@@ -505,7 +503,7 @@ const InsuranceView = () => {
                 return;
             }
             setSelectedFiles(event.target.files);
-            // Optionally, you can loop through files here for more validation (size, type)
+            
         }
     };
 
@@ -736,11 +734,13 @@ const InsuranceView = () => {
                                                     <List disablePadding>
                                                         <ListItem disablePadding sx={{ mb: 1 }}>
                                                             <ListItemIcon sx={{ minWidth: 36 }}>
-                                                                <AttachMoneyIcon color="primary" fontSize="small" />
+                                                                <Typography color="primary" variant="h6" component="span" sx={{ lineHeight: 1 }}>
+                                                                    £
+                                                                </Typography>
                                                             </ListItemIcon>
                                                             <ListItemText
                                                                 primary="Coverage Amount"
-                                                                secondary={`$${sanitizeNumber(policy.coverage_amount).toFixed(2)}`}
+                                                                secondary={`£${sanitizeNumber(policy.coverage_amount).toFixed(2)}`}
                                                                 primaryTypographyProps={{ variant: 'body2' }}
                                                                 secondaryTypographyProps={{ 
                                                                     variant: 'subtitle1',
@@ -958,11 +958,13 @@ const InsuranceView = () => {
                                                         }}
                                                     >
                                                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                            <AttachMoneyIcon color="primary" sx={{ mr: 1 }} />
+                                                            <Typography color="primary" variant="h6" component="span" sx={{ lineHeight: 1, mr: 1 }}>
+                                                                £
+                                                            </Typography>
                                                             <Typography variant="body2" color="text.secondary">Claim Amount</Typography>
                                                         </Box>
                                                         <Typography variant="h6" color="primary.main" fontWeight="bold">
-                                                            ${sanitizeNumber(claim.claim_amount).toFixed(2)}
+                                                            £{sanitizeNumber(claim.claim_amount).toFixed(2)}
                                                         </Typography>
                                                     </Box>
                                                     
@@ -1126,7 +1128,7 @@ const InsuranceView = () => {
                                 </Typography>
                                 <Typography variant="body2">
                                     Your membership allows for {membershipType === 'basic' ? 'basic' : membershipType === 'premium' ? 'enhanced' : 'premium'} insurance coverage 
-                                    up to ${getMaxInsuranceCoverage(membershipType)}.
+                                    up to £{getMaxInsuranceCoverage(membershipType)}.
                                 </Typography>
                             </Alert>
                         ) : (
@@ -1218,7 +1220,7 @@ const InsuranceView = () => {
                             value={policyForm.coverage_amount}
                             disabled // Make amount read-only, derived from type
                             InputProps={{
-                                startAdornment: <span style={{ marginRight: '8px' }}>£</span>, // Use £ symbol
+                                startAdornment: <span style={{ marginRight: '8px' }}>£</span>, 
                             }}
                             helperText="The maximum coverage amount for claims (determined by type)"
                         />
@@ -1306,7 +1308,7 @@ const InsuranceView = () => {
                                                         {policy.make} {policy.model} - Policy #{policy.id}
                                                     </Typography>
                                                     <Typography variant="body2" color="text.secondary">
-                                                        {getPolicyTypeDetails(policy.coverage_type).label} - ${sanitizeNumber(policy.coverage_amount).toFixed(2)}
+                                                        {getPolicyTypeDetails(policy.coverage_type).label} - £{sanitizeNumber(policy.coverage_amount).toFixed(2)}
                                                     </Typography>
                                                 </Box>
                                             </Button>
@@ -1338,7 +1340,7 @@ const InsuranceView = () => {
                                             <Grid item xs={12} sm={4}>
                                                 <Typography variant="body2" color="text.secondary">Coverage Amount</Typography>
                                                 <Typography variant="body1" fontWeight="medium">
-                                                    ${sanitizeNumber(selectedPolicy.coverage_amount).toFixed(2)}
+                                                    £{sanitizeNumber(selectedPolicy.coverage_amount).toFixed(2)}
                                                 </Typography>
                                             </Grid>
                                             <Grid item xs={12}>
@@ -1436,7 +1438,7 @@ const InsuranceView = () => {
                                             required
                                             error={Boolean(error && error.includes('amount'))}
                                             helperText={selectedPolicy ?
-                                                `Maximum coverage: $${sanitizeNumber(selectedPolicy.coverage_amount).toFixed(2)}` :
+                                                `Maximum coverage: £${sanitizeNumber(selectedPolicy.coverage_amount).toFixed(2)}` :
                                                 "Enter the amount you're claiming"
                                             }
                                             inputProps={{

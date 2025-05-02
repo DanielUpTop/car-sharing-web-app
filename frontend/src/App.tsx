@@ -29,6 +29,7 @@ import EnhancedChat from './components/chat/EnhancedChat'
 import AdminChat from './components/admin/AdminChat'
 import PaymentCompletion from './components/payments/PaymentCompletion'
 import CarDetailView from './components/cars/CarDetailView'
+import RewardsPage from './components/rewards/RewardsPage'
 
 // Admin components
 import AdminLayout from './components/admin/AdminLayout'
@@ -42,6 +43,7 @@ import SupportTickets from './components/admin/support/SupportTickets'
 import AdminHelpCenter from './components/admin/help/AdminHelpCenter'
 import MembershipManagement from './components/admin/MembershipManagement'
 import InsuranceManagement from './components/admin/InsuranceManagement'
+import RewardManagement from './pages/Admin/RewardManagement'
 
 // New component to handle query parameters globally
 const QueryParamHandler = () => {
@@ -80,7 +82,8 @@ const QueryParamHandler = () => {
       queryParams.delete('session_id');
       // Add state for potential use on the target page (optional)
       // Note: Linter might complain, but react-router supports this.
-      navigationOptions = { ...navigationOptions, state: { membershipSuccess: true } };
+      // Cast navigationOptions to include state
+      navigationOptions = { ...navigationOptions, state: { membershipSuccess: true } } as typeof navigationOptions & { state: { membershipSuccess: boolean } };
 
     }
     // --- Keep existing handlers for other scenarios ---
@@ -170,6 +173,7 @@ function App() {
                     <Route path="membership" element={<MembershipView />} />
                     <Route path="help" element={<HelpCenter />} />
                     <Route path="chat" element={<EnhancedChat />} />
+                    <Route path="rewards" element={<RewardsPage />} />
                   </Routes>
                 </ProtectedRoute>
               } />
@@ -205,6 +209,7 @@ function App() {
                 <Route path="insurance" element={<InsuranceManagement />} />
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="chat" element={<AdminChat />} />
+                <Route path="rewards" element={<RewardManagement />} />
                 <Route path="chat-archive" element={<ChatArchive />} />
                 <Route path="tickets" element={<SupportTickets />} />
                 <Route path="help/manage" element={<AdminHelpCenter />} />

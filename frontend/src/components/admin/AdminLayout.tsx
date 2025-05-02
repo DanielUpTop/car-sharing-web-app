@@ -35,6 +35,7 @@ import {
     CardMembership as CardMembershipIcon,
     Security as SecurityIcon,
     Warning as WarningIcon,
+    EmojiEvents as RewardsIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -75,6 +76,7 @@ const AdminLayout = () => {
         { text: 'User Management', icon: <PeopleIcon />, path: '/admin/users' },
         { text: 'Booking Management', icon: <BookingIcon />, path: '/admin/bookings' },
         { text: 'Membership Management', icon: <CardMembershipIcon />, path: '/admin/members' },
+        { text: 'Rewards Management', icon: <RewardsIcon />, path: '/admin/rewards' },
         { text: 'Insurance Management', icon: <SecurityIcon />, path: '/admin/insurance' },
         { text: 'Analytics', icon: <AnalyticsIcon />, path: '/admin/analytics' },
         { text: 'Live Chat Archive', icon: <ChatIcon />, path: '/admin/chat-archive' },

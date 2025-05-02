@@ -11,6 +11,7 @@ const {
     getAllUsers,
     getUserByIdAdmin,
     updateUserAdmin,
+    addPointsToUser,
 } = require('../controllers/adminController');
 
 // Apply authentication and admin middleware to all routes in this file
@@ -1263,5 +1264,75 @@ router.route('/users')
 router.route('/users/:id')
     .get(getUserByIdAdmin)
     .put(updateUserAdmin);
+
+// New route for adding points
+router.post('/users/:id/points', addPointsToUser);
+
+// Update user status (e.g., block/unblock)
+router.put('/users/:id/status', async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['active', 'blocked'].includes(status)) {
+        return res.status(400).json({ message: 'Invalid status value.' });
+    }
+
+    try {
+        const [result] = await db.query(
+            'UPDATE users SET status = ? WHERE id = ?',
+            [status, id]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.json({ message: `User status updated to ${status}` });
+    } catch (error) {
+        console.error('Error updating user status:', error);
+        res.status(500).json({ message: 'Error updating user status' });
+    }
+});
+
+// >>> START NEW ROUTE: Delete a user <<<
+router.delete('/users/:id', async (req, res) => {
+    const { id } = req.params;
+
+    // Basic validation: Ensure ID is a number
+    if (isNaN(parseInt(id, 10))) {
+        return res.status(400).json({ message: 'Invalid user ID.' });
+    }
+
+    // Prevent admin from deleting themselves (optional but good practice)
+    if (req.user && parseInt(id, 10) === req.user.id) {
+        return res.status(403).json({ message: 'Admin cannot delete their own account.' });
+    }
+
+    try {
+        // Check if user exists before attempting delete
+        const [userCheck] = await db.query('SELECT id FROM users WHERE id = ?', [id]);
+        if (userCheck.length === 0) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        // Perform the delete operation
+        const [result] = await db.query('DELETE FROM users WHERE id = ?', [id]);
+
+        if (result.affectedRows === 0) {
+            // This case might be redundant due to the check above, but kept for safety
+            return res.status(404).json({ message: 'User not found or already deleted.' });
+        }
+
+        console.log(`Admin (ID: ${req.user.id}) deleted user with ID: ${id}`);
+        res.status(200).json({ message: 'User deleted successfully.' });
+
+    } catch (error) {
+        console.error(`Error deleting user with ID ${id}:`, error);
+        // Check for foreign key constraint errors specifically if needed
+        if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+             return res.status(409).json({ message: 'Cannot delete user. User has related records (e.g., bookings, memberships). Consider blocking instead.' });
+        }
+        res.status(500).json({ message: 'Error deleting user.' });
+    }
+});
+// >>> END NEW ROUTE <<<
 
 module.exports = router; 

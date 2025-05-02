@@ -6,7 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://m.stripe.network blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com blob:; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; frame-src 'self' https://js.stripe.com; connect-src 'self' http://localhost:5001 ws://localhost:5001 ws://localhost:5173 https://api.stripe.com https://api.emailjs.com"
+      content="
+        default-src 'self'; 
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://*.stripe.com blob:; 
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.stripe.com blob:; 
+        font-src 'self' https://fonts.gstatic.com; 
+        img-src 'self' data: https: https://*.stripe.com; 
+        frame-src 'self' https://js.stripe.com https://hooks.stripe.com; 
+        connect-src 'self' http://localhost:5001 ws://localhost:5001 ws://localhost:5173 https://api.stripe.com https://*.stripe.com https://api.emailjs.com
+      "
     />
     <title>Vite + React + TS</title>
   </head>

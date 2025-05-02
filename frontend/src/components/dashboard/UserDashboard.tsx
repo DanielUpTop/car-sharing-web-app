@@ -289,7 +289,9 @@ const UserDashboard = () => {
         }
     };
 
-    if (isLoading) {
+    const isOverallLoading = isLoading || membershipLoading;
+
+    if (isOverallLoading) {
         return (
             <Box 
                 display="flex" 

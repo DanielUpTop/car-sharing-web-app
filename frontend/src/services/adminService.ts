@@ -22,6 +22,7 @@ export interface AdminUserListItem {
     is_verified: boolean;
     created_at: string;
     updated_at: string;
+    reward_points?: number; // Re-add reward points field
 }
 
 // Define a type for the full user details (returned by findById)
@@ -89,9 +90,14 @@ export const updateUserAdmin = async (userId: number, userData: UpdateUserAdminP
 // Add the delete function
 export const deleteUserAdmin = async (userId: number): Promise<void> => {
     await axios.delete(`${API_URL}/users/${userId}`, getAuthHeaders());
-}; 
+};
 
-// Potentially add a delete function if needed
-// export const deleteUserAdmin = async (userId: number): Promise<void> => { // Remove this commented out section if it exists
-//     await axios.delete(`${API_URL}/users/${userId}`, getAuthHeaders());
-// }; 
+// Re-add reward points function (Admin)
+export const addRewardPointsAdmin = async (userId: number, points: number): Promise<{ message: string; newPointsTotal: number }> => {
+    const response = await axios.post<{ message: string; newPointsTotal: number }>(
+        `${API_URL}/users/${userId}/points`,
+        { points }, // Request body
+        getAuthHeaders()
+    );
+    return response.data;
+}; 

@@ -146,38 +146,42 @@ const MembershipView = () => {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Memoize searchParams to avoid unnecessary effect runs if only hash changes etc.
-    const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+    // Check location state for success message
+    const paymentSuccessFromState = location.state?.membershipSuccess === true;
 
     useEffect(() => {
-        console.log('[MembershipView Effect] Running. Search params:', searchParams.toString());
+        console.log('[MembershipView Effect] Running. Location state:', location.state);
         let isMounted = true;
-        // Store the timeout ID so it can be cleared
         let retryTimeoutId: NodeJS.Timeout | null = null;
 
         const loadData = async (isRetry = false) => {
             if (!isRetry && isMounted) {
                 setLoading(true);
-                setError(null); // Clear previous errors on initial load
+                setError(null);
             }
-            // Fetch tiers first or in parallel if independent
-            await fetchMembershipTiers();
-            // Now fetch membership, potentially triggering retries if coming from success redirect
-            const paymentSuccess = searchParams.get('payment_success') === 'true';
-            const expectedType = searchParams.get('type') || undefined; // Get expected type
+            await fetchMembershipTiers(); // Fetch tiers regardless
 
-            if (paymentSuccess && expectedType) {
-                console.log(`[MembershipView Effect] Payment success detected for type: ${expectedType}. Initiating fetch with retry logic.`);
-                fetchMembership(expectedType); // Start fetch with retry logic
-                // Clear the query parameters from URL after initiating fetch
-                console.log('[MembershipView Effect] Clearing payment success query params.');
-                navigate(location.pathname, { replace: true });
+            // Check state for success indication
+            if (paymentSuccessFromState) {
+                console.log('[MembershipView Effect] Payment success detected from navigation state. Initiating fetch.');
+                // Await the fetch triggered by the success state
+                await fetchMembership(); 
+                console.log('[MembershipView Effect] Fetch completed after detecting success state. Clearing state.');
+                // Clear the state *after* initiating fetch to prevent re-triggering
+                // Check if component is still mounted before navigating
+                if (isMounted) {
+                    navigate(location.pathname, { replace: true, state: { ...location.state, membershipSuccess: undefined } });
+                }
             } else {
                 // Standard fetch if not coming from payment success
+                // No need to await here as loading state handles it
                 fetchMembership();
             }
 
-            if (!isRetry && isMounted) {
+            // Set loading false only if the component is still mounted and not in a retry triggered internally by fetchMembership
+            if (isMounted && !isRetry) { // Check isRetry might be needed depending on fetchMembership structure
+                // Let's simplify: loading is primarily for the initial load sequence triggered by the effect.
+                // FetchMembership's internal retries shouldn't restart the main loading spinner.
                 setLoading(false);
             }
         };
@@ -187,18 +191,17 @@ const MembershipView = () => {
         // Cleanup function
         return () => {
              isMounted = false;
-             // Clear any pending timeout on unmount
              if (retryTimeoutId) {
                  clearTimeout(retryTimeoutId);
              }
-             console.log('[MembershipView Effect] Cleanup: Unmounted or search params changed.');
+             console.log('[MembershipView Effect] Cleanup: Unmounted.');
         };
 
-    // Depend on searchParams (derived from location.search)
-    }, [searchParams, navigate]); // Added navigate dependency
+    // Depend on location.state.membershipSuccess existence and navigate function
+    }, [paymentSuccessFromState, navigate]); // Using the memoized state value
 
-    // Modify fetchMembership to handle retry logic
-    const fetchMembership = async (expectedType?: string, retryCount = 0) => {
+    // Modify fetchMembership to handle retry logic - REMOVE expectedType and associated logic
+    const fetchMembership = async (retryCount = 0) => {
         if (retryCount === 0) { // Only set error to null on the first attempt of a sequence
             setError(null);
         }
@@ -207,7 +210,7 @@ const MembershipView = () => {
 
         try {
             const token = localStorage.getItem('token');
-            console.log(`[fetchMembership Attempt ${retryCount + 1}] Fetching membership${expectedType ? ` (expecting type: ${expectedType})` : ''}...`);
+            console.log(`[fetchMembership Attempt ${retryCount + 1}] Fetching membership...`);
             const response = await fetch(`${import.meta.env.VITE_API_URL}/api/memberships?t=${Date.now()}`, { // Keep cache-busting
                 headers: {
                      Authorization: `Bearer ${token}`
@@ -223,31 +226,6 @@ const MembershipView = () => {
             const data: Membership | null = response.status === 404 ? null : await response.json();
             console.log(`[fetchMembership Attempt ${retryCount + 1}] Data received:`, data);
 
-            // Check if retry is needed
-            if (expectedType && data?.type !== expectedType && retryCount < MAX_FETCH_RETRIES) {
-                const nextRetryCount = retryCount + 1;
-                const delay = INITIAL_RETRY_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, retryCount);
-                console.log(`[fetchMembership] Type mismatch (Expected: ${expectedType}, Got: ${data?.type}). Retrying attempt ${nextRetryCount}/${MAX_FETCH_RETRIES + 1} in ${delay.toFixed(0)}ms...`);
-
-                // Schedule the next retry and store its ID
-                currentRetryTimeoutId = setTimeout(() => {
-                     fetchMembership(expectedType, nextRetryCount);
-                }, delay);
-
-                 // Update the effect's cleanup reference
-                 // This assignment needs to be careful if the effect could re-run
-                 // It might be cleaner to manage timeouts outside the fetch function itself
-                 // For now, let's assume this works within the effect's lifecycle
-
-
-                return; // Stop processing this attempt, wait for retry
-            } else if (expectedType && data?.type !== expectedType && retryCount >= MAX_FETCH_RETRIES) {
-                console.warn(`[fetchMembership] Max retries (${MAX_FETCH_RETRIES + 1}) reached, but membership type still not '${expectedType}'. Displaying potentially stale data.`);
-                setError(`Membership update is taking longer than expected. Please refresh the page in a moment. Expected type: ${expectedType}, Current type: ${data?.type || 'None'}`);
-            } else if (expectedType && data?.type === expectedType) {
-                 console.log(`[fetchMembership] Expected type '${expectedType}' confirmed.`);
-            }
-
             // If no retry is needed or retries exhausted, update the state
             setMembership(data);
             setAutoRenew(data?.auto_renew || false);
@@ -255,7 +233,7 @@ const MembershipView = () => {
         } catch (err) {
             console.error(`[fetchMembership Attempt ${retryCount + 1}] Error caught:`, err);
             // Only set error if it's the final attempt or not a retry scenario
-             if (!expectedType || retryCount >= MAX_FETCH_RETRIES) {
+             if (retryCount >= MAX_FETCH_RETRIES) {
                 setError(err instanceof Error ? err.message : 'An error occurred fetching membership');
                 setMembership(null); // Clear membership on final error
              } else {
@@ -264,9 +242,8 @@ const MembershipView = () => {
                  const delay = INITIAL_RETRY_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, retryCount);
                  console.log(`[fetchMembership] Error during fetch. Retrying attempt ${nextRetryCount}/${MAX_FETCH_RETRIES + 1} in ${delay.toFixed(0)}ms...`);
                  currentRetryTimeoutId = setTimeout(() => {
-                     fetchMembership(expectedType, nextRetryCount);
+                     fetchMembership(nextRetryCount);
                  }, delay);
-                 // Potentially update the effect's cleanup reference here too
              }
         } finally {
             console.log(`[fetchMembership Attempt ${retryCount + 1}] Fetch attempt complete.`);
@@ -437,14 +414,12 @@ const MembershipView = () => {
                 sessionId: sessionId,
             });
 
-            // This point is only reached if redirectToCheckout fails (e.g., network error)
             if (stripeError) {
                 console.error("Stripe redirection error:", stripeError);
                 throw new Error(stripeError.message || 'Failed to redirect to payment page.');
             }
 
-            // Success is handled by Stripe redirecting to success_url, no need for client-side toast here
-            // toast.success(`Redirecting to payment page...`); 
+            // Success is handled by Stripe redirecting to success_url
             setShowUpgradeDialog(false);
 
         } catch (err) {
@@ -740,8 +715,11 @@ const MembershipView = () => {
                                     </Typography>
 
                                     <Typography variant="h4" color="primary" sx={{ mb: 2 }}>
-                                        {tier.type === 'none' ? 'FREE' : `£${tier.price.toFixed(2)}`}
-                                        {tier.type !== 'none' && <Typography variant="caption" sx={{ ml: 1 }}>/month</Typography>}
+                                        {tier.type === 'none' ? 'FREE' : 
+                                         (typeof tier.price === 'number' ? `£${tier.price.toFixed(2)}` : '£--.--')}
+                                        {tier.type !== 'none' && 
+                                         (typeof tier.price === 'number') && 
+                                         <Typography variant="caption" sx={{ ml: 1 }}>/month</Typography>}
                                     </Typography>
 
                                     {tier.type === 'none' && (

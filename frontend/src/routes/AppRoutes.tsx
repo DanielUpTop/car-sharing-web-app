@@ -11,6 +11,7 @@ import UserDashboard from '../components/dashboard/UserDashboard';
 import PaymentComplete from '../components/payments/PaymentComplete';
 import MembershipView from '../components/membership/MembershipView';
 import InsuranceView from '../components/insurance/InsuranceView';
+import RewardsPage from '../components/rewards/RewardsPage';
 import AdminLayout from '../components/admin/AdminLayout';
 import AdminDashboard from '../components/admin/AdminDashboard';
 import MembershipManagement from '../components/admin/MembershipManagement';
@@ -51,6 +52,10 @@ const AppRoutes = () => {
             <Route 
                 path="/dashboard/insurance" 
                 element={<ProtectedRoute><InsuranceView /></ProtectedRoute>}
+            />
+            <Route 
+                path="/dashboard/rewards" 
+                element={<ProtectedRoute><RewardsPage /></ProtectedRoute>}
             />
             <Route 
                 path="/payment/complete" 

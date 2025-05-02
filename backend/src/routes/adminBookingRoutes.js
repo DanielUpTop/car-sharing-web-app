@@ -5,6 +5,7 @@ const isAdmin = require('../middleware/adminAuth');
 const db = require('../config/dbConfig');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // Apply authentication and admin middleware to all routes
 router.use(authenticateToken);
@@ -213,17 +214,93 @@ router.get('/bookings/:id', async (req, res) => {
 
 // Update booking status
 router.put('/:id/status', async (req, res) => {
+    const connection = await db.getConnection(); // Get a connection
     try {
         const { id } = req.params;
         const { status } = req.body;
-        
-        const query = 'UPDATE bookings SET status = ? WHERE id = ?';
-        await db.query(query, [status, id]);
-        
+
+        // Start transaction
+        await connection.beginTransaction();
+
+        // Fetch the booking details, including user_id, current status, payment_status, and stripe_payment_intent_id
+        const [booking] = await connection.query(
+            'SELECT user_id, status, payment_status, stripe_payment_intent_id FROM bookings WHERE id = ?',
+            [id]
+        );
+
+        if (booking.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Booking not found' });
+        }
+
+        const currentStatus = booking[0].status;
+        const currentPaymentStatus = booking[0].payment_status; // Get current payment status
+        const paymentIntentId = booking[0].stripe_payment_intent_id;
+        const userId = booking[0].user_id;
+
+        // Determine if a reward was applied based on the payment intent metadata (best effort)
+        let rewardWasAppliedBasedOnMetadata = false;
+        if (paymentIntentId) {
+            try {
+                const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+                if (paymentIntent.metadata.reward_discount_applied && paymentIntent.metadata.reward_discount_applied !== 'none') {
+                    rewardWasAppliedBasedOnMetadata = true;
+                    console.log(`Admin Confirm: Metadata check - Reward (${paymentIntent.metadata.reward_discount_applied}) was applied to this booking via Payment Intent ${paymentIntentId}.`);
+                }
+            } catch (stripeError) {
+                console.error(`Admin Confirm: Error retrieving Payment Intent ${paymentIntentId} from Stripe:`, stripeError);
+                // If PI fetch fails, we rely solely on payment_status check below
+            }
+        }
+
+        // Update booking status
+        const updateQuery = 'UPDATE bookings SET status = ? WHERE id = ?';
+        const [updateResult] = await connection.query(updateQuery, [status, id]);
+
+        if (updateResult.affectedRows === 0) {
+            // If no rows were updated (e.g., status was already the target status), roll back
+            await connection.rollback();
+            // Send a success message still, as the state is as requested, or handle as needed
+            return res.json({ message: 'Booking status was already set or booking not found.' });
+        }
+
+        // --- Refined Point Award Logic ---
+        // Award points ONLY if:
+        // 1. Status is changing to 'confirmed'
+        // 2. Status wasn't already 'confirmed'
+        // 3. Payment status is NOT 'paid' (primary check - webhook should handle resets if paid)
+        const shouldAwardPoint = 
+            status === 'confirmed' && 
+            currentStatus !== 'confirmed' && 
+            currentPaymentStatus !== 'paid';
+
+        if (shouldAwardPoint) {
+            console.log(`Booking ${id} confirmed by admin (Payment status: ${currentPaymentStatus}). Awarding 1 reward point to user ${userId}.`);
+            const pointQuery = 'UPDATE users SET reward_points = reward_points + 1 WHERE id = ?';
+            await connection.query(pointQuery, [userId]);
+        } else if (status === 'confirmed' && currentStatus !== 'confirmed') {
+            // Log why point was NOT awarded
+            if (currentPaymentStatus === 'paid') {
+                 console.log(`Booking ${id} confirmed by admin, but payment status was already 'paid'. Reward point NOT awarded by this action.`);
+            } else if (rewardWasAppliedBasedOnMetadata) {
+                 // This case should ideally not be hit if payment_status is correct, but log just in case
+                 console.log(`Booking ${id} confirmed by admin, but reward metadata indicated reward was applied. Reward point NOT awarded by this action.`);
+            } else {
+                 // Should not happen if currentStatus !== 'confirmed'
+                 console.log(`Booking ${id} confirmed by admin, but conditions not met for point award (currentStatus: ${currentStatus}, paymentStatus: ${currentPaymentStatus}, rewardMetaApplied: ${rewardWasAppliedBasedOnMetadata}).`);
+            }
+        }
+
+        // Commit transaction
+        await connection.commit();
+
         res.json({ message: 'Booking status updated successfully' });
     } catch (error) {
+        await connection.rollback(); // Rollback on any error
         console.error('Error updating booking status:', error);
         res.status(500).json({ message: 'Error updating booking status' });
+    } finally {
+        if (connection) connection.release(); // Release connection
     }
 });
 

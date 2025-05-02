@@ -22,6 +22,7 @@ import HelpIcon from '@mui/icons-material/Help';
 import ChatIcon from '@mui/icons-material/Chat';
 import CardMembershipIcon from '@mui/icons-material/CardMembership';
 import SecurityIcon from '@mui/icons-material/Security';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -216,6 +217,35 @@ const Dashboard = () => {
                                     size="large"
                                 >
                                     View Membership
+                                </Button>
+                            </CardActions>
+                        </Card>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                        <Card sx={{ 
+                            height: '100%', 
+                            display: 'flex', 
+                            flexDirection: 'column',
+                            '&:hover': { transform: 'scale(1.02)', transition: 'transform 0.2s' }
+                        }}>
+                            <CardContent sx={{ flexGrow: 1, textAlign: 'center', py: 4 }}>
+                                <EmojiEventsIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
+                                <Typography gutterBottom variant="h5" component="h2">
+                                    Rewards
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    View your points and redeem rewards
+                                </Typography>
+                            </CardContent>
+                            <CardActions sx={{ justifyContent: 'center', pb: 3 }}>
+                                <Button 
+                                    onClick={() => navigate('/dashboard/rewards')}
+                                    variant="contained" 
+                                    color="primary"
+                                    size="large"
+                                >
+                                    View Rewards
                                 </Button>
                             </CardActions>
                         </Card>

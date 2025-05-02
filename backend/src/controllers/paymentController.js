@@ -12,19 +12,32 @@ const createPaymentIntent = async (req, res) => {
     let connection;
     try {
         // Import dbConfig for pool access within the function scope if needed
-        const db = require('../config/dbConfig'); 
+        const db = require('../config/dbConfig');
         connection = await db.getConnection();
         await connection.beginTransaction();
 
-        const { amount, carId, startDate, endDate } = req.body;
+        // Include appliedRewardPoints in destructuring
+        const { amount, carId, startDate, endDate, appliedRewardPoints } = req.body; //The amount is now original base price
         const userId = req.user.id;
-        console.log(`[PaymentController] Data received: userId=${userId}, amount=${amount}, carId=${carId}, startDate=${startDate}, endDate=${endDate}`);
+        // Use Number() to ensure it's a number, default to 0 if undefined/null/NaN
+        const pointsToApply = Number(appliedRewardPoints) || 0;
+
+        console.log(`[PaymentController] Data received: userId=${userId}, originalAmount=${amount}, carId=${carId}, startDate=${startDate}, endDate=${endDate}, appliedRewardPoints=${pointsToApply}`);
 
         if (!amount || !carId || !startDate || !endDate) {
             console.log('[PaymentController] Missing required fields');
             await connection.rollback();
             return res.status(400).json({ error: 'Missing required fields' });
         }
+
+        //Fetch User Data (including reward points) 
+        const [userData] = await connection.query('SELECT reward_points FROM users WHERE id = ?', [userId]);
+        if (!userData || userData.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'User not found' });
+        }
+        const currentUserPoints = userData[0].reward_points;
+        console.log(`[PaymentController] User ${userId} current points: ${currentUserPoints}`);
 
         // --- Check Car Availability & Overlapping Bookings (crucial!) ---
         const [carCheck] = await connection.query('SELECT availability_status FROM cars WHERE id = ? FOR UPDATE', [carId]);
@@ -47,8 +60,9 @@ const createPaymentIntent = async (req, res) => {
             await connection.rollback();
             return res.status(409).json({ message: 'Car already booked for this period' });
         }
-        // --- End Availability Checks ---
+        // End Availability Checks
 
+        //Apply Membership Discount 
         const membership = await Membership.getUserMembership(userId);
         let finalAmount = amount;
         let discountPercentage = 0;
@@ -64,15 +78,72 @@ const createPaymentIntent = async (req, res) => {
             }
              if (discountPercentage > 0) {
                 finalAmount = parseFloat((originalPrice * (1 - discountPercentage / 100)).toFixed(2));
-                console.log(`Applied ${membership.type} discount. Original: ${originalPrice}, Discounted: ${finalAmount}`);
+                console.log(`Applied ${membership.type} discount. Original: ${originalPrice}, Discounted (after membership): ${finalAmount}`);
             } else {
-                 finalAmount = originalPrice; // Ensure finalAmount is set even if discount is 0
+                 finalAmount = originalPrice; //Ensure finalAmount is set even if discount is 0
             }
         } else {
-            finalAmount = originalPrice; // Ensure finalAmount is set if no membership
+            finalAmount = originalPrice; //Ensure finalAmount is set if no membership
         }
 
-        // Convert amount to cents
+        console.log(`[PaymentController] Price after membership discount: £${finalAmount.toFixed(2)}`);
+
+        //Apply Reward Discount (if selected and valid) 
+        let rewardDiscountAmount = 0;
+        let rewardAppliedMetadata = 'none'; // For Stripe metadata
+
+        if (pointsToApply > 0) {
+            console.log(`[PaymentController] User wants to apply ${pointsToApply} points.`);
+            
+            // Validate points and determine discount
+            if (pointsToApply === 1 && currentUserPoints >= 1) {
+                rewardDiscountAmount = 5.00;
+                rewardAppliedMetadata = '1 points - £5 off';
+            } else if (pointsToApply === 20 && currentUserPoints >= 20) {
+                rewardDiscountAmount = 15.00;
+                rewardAppliedMetadata = '20 points - £15 off';
+            } else if (pointsToApply === 30 && currentUserPoints >= 30) {
+                rewardDiscountAmount = 20.00; 
+                rewardAppliedMetadata = '30 points - £20 off';
+            } else {
+                // Invalid points amount requested or insufficient points
+                 console.warn(`[PaymentController] Invalid or insufficient reward points requested (${pointsToApply}). Current points: ${currentUserPoints}. No reward applied.`);
+                 // Proceed without reward discount
+                 rewardDiscountAmount = 0;
+                 rewardAppliedMetadata = 'none';
+            }
+
+            if (rewardDiscountAmount > 0) {
+                console.log(`[PaymentController] Applying reward discount: £${rewardDiscountAmount.toFixed(2)}`);
+                finalAmount = Math.max(0, finalAmount - rewardDiscountAmount); // Apply reward discount, ensure price >= 0
+                console.log(`[PaymentController] Price after reward discount: £${finalAmount.toFixed(2)}`);
+            }
+        }
+
+        // *** REVISED: Deduct points correctly and record amount used ***
+        let pointsSuccessfullyDeducted = false; // Flag to track deduction
+        if (rewardDiscountAmount > 0 && pointsToApply > 0) {
+            console.log(`[PaymentController] Attempting to deduct ${pointsToApply} points from user ${userId}.`);
+            // Deduct specific amount, ensuring user has enough points
+            const [deductResult] = await connection.query(
+                'UPDATE users SET reward_points = reward_points - ? WHERE id = ? AND reward_points >= ?', 
+                [pointsToApply, userId, pointsToApply]
+            );
+            
+            // Check if deduction was successful
+            if (deductResult.affectedRows === 0) {
+                 console.error(`[PaymentController] Failed to deduct ${pointsToApply} points from user ${userId} (Insufficient points or user not found). Rolling back.`);
+                 await connection.rollback();
+                 // Return a specific error to the user
+                 return res.status(400).json({ message: 'Insufficient reward points to apply the selected discount.' });
+            }
+            pointsSuccessfullyDeducted = true; // Mark deduction as successful
+            console.log(`[PaymentController] Successfully deducted ${pointsToApply} points for user ${userId}.`);
+        }
+        // *** End Revised Deduction Logic ***
+
+        console.log(`[PaymentController] Price after reward discount: £${finalAmount.toFixed(2)}`);
+
         const amountInCents = Math.round(finalAmount * 100);
 
         // Validate dates
@@ -85,12 +156,14 @@ const createPaymentIntent = async (req, res) => {
         // 1. Create Booking Record
         console.log('[PaymentController] Inserting booking record...');
         const [bookingResult] = await connection.query(
-            `INSERT INTO bookings (user_id, car_id, start_date, end_date, total_price, status, payment_status)
-             VALUES (?, ?, ?, ?, ?, 'pending', 'pending')`,
-            [userId, carId, startDate, endDate, finalAmount] // Use finalAmount for total_price
+            `INSERT INTO bookings 
+             (user_id, car_id, start_date, end_date, total_price, status, payment_status, reward_points_used) 
+             VALUES (?, ?, ?, ?, ?, 'pending', 'pending', ?)`, // Add reward_points_used here
+            // Record points used ONLY if they were successfully deducted earlier
+            [userId, carId, startDate, endDate, finalAmount, pointsSuccessfullyDeducted ? pointsToApply : 0]
         );
         const bookingId = bookingResult.insertId;
-        console.log(`[PaymentController] Booking record created with ID: ${bookingId}`);
+        console.log(`[PaymentController] Booking record created with ID: ${bookingId}. Points used recorded: ${pointsSuccessfullyDeducted ? pointsToApply : 0}`);
 
         // 2. Update Car Status
         console.log(`[PaymentController] Updating car status for car ID: ${carId}`);
@@ -113,12 +186,11 @@ const createPaymentIntent = async (req, res) => {
                 booking_id: bookingId.toString(),
                 user_id: userId.toString(),
                 car_id: carId,
-                start_date: startDate, // Store original format passed
-                end_date: endDate,     // Store original format passed
-                original_amount: originalPrice.toString(),
-                discounted_amount: finalAmount.toString(),
-                has_membership: membership ? 'true' : 'false',
-                membership_type: membership ? membership.type : 'none'
+                start_date: startDate, 
+                original_amount: originalPrice.toString(), // Original before any discounts
+                membership_discount_applied: (discountPercentage > 0).toString(), // Was membership discount used or not
+                reward_discount_applied: rewardAppliedMetadata, // Store reward info 
+                final_amount: finalAmount.toString() // Final amount charged
             }
         });
         console.log('[PaymentController] Stripe Payment Intent created successfully:', paymentIntent.id);
@@ -138,9 +210,10 @@ const createPaymentIntent = async (req, res) => {
             clientSecret: paymentIntent.client_secret,
             bookingId: bookingId, // Include bookingId in the response
             originalAmount: originalPrice,
-            discountedAmount: finalAmount,
+            discountedAmount: finalAmount, // Final amount after all discounts
             hasMembership: !!membership,
-            membershipType: membership ? membership.type : null
+            membershipType: membership ? membership.type : null,
+            rewardApplied: rewardDiscountAmount > 0 ? rewardAppliedMetadata : null // Tell frontend if reward was applied
         });
         console.log('[PaymentController] Response sent.');
 
@@ -169,10 +242,6 @@ const handleWebhook = async (req, res) => {
 
     try {
         console.log('[WEBHOOK] Attempting to construct event...');
-        // --- TEMPORARY DEBUG LOG ---
-        // Log the secret key being used for verification. REMOVE THIS IN PRODUCTION.
-        // console.log('[WEBHOOK DEBUG] Using secret:', process.env.STRIPE_WEBHOOK_SECRET ? `"${process.env.STRIPE_WEBHOOK_SECRET.substring(0, 10)}..."` : 'Not found/undefined');
-        // --- END TEMPORARY DEBUG LOG ---
         event = stripe.webhooks.constructEvent(
             req.body,
             sig,
@@ -213,7 +282,7 @@ const handleWebhook = async (req, res) => {
 
                 await connection.beginTransaction();
                 try {
-                    // 1. Deactivate any existing active/pending memberships for the user
+                    //Deactivate any existing active/pending memberships for the user
                     logger.info(`Webhook: Deactivating existing memberships for user ${userId}.`);
                     await connection.query(
                         'UPDATE memberships SET status = ?, end_date = NOW() WHERE user_id = ? AND status IN (?, ?)',
@@ -221,21 +290,20 @@ const handleWebhook = async (req, res) => {
                     );
                     logger.info(`Webhook: Existing memberships deactivated for user ${userId}.`);
 
-                    // 2. Create the new active membership record
+                    //Create the new active membership record
                     const startDate = new Date();
                     const endDate = new Date(startDate);
-                    endDate.setMonth(endDate.getMonth() + 1); // Simple monthly membership
+                    endDate.setMonth(endDate.getMonth() + 1); 
 
                     logger.info(`Webhook: Inserting new membership: User=${userId}, Type=${membershipType}, Start=${startDate.toISOString()}, End=${endDate.toISOString()}, Session=${sessionId}`);
                     const [insertResult] = await connection.query(
                         `INSERT INTO memberships (user_id, type, status, start_date, end_date, auto_renew)
                          VALUES (?, ?, ?, ?, ?, ?)`,
-                        [userId, membershipType, 'active', startDate, endDate, true] // Default auto_renew to true
+                        [userId, membershipType, 'active', startDate, endDate, true] 
                     );
                     logger.info(`Webhook: New membership (ID: ${insertResult.insertId}) created for user ${userId}.`);
 
-                    // Optional: Link to membership_tiers table if needed
-                    // await connection.query('UPDATE memberships SET membership_tier_id = ? WHERE id = ?', [tierId, insertResult.insertId]);
+                  
 
                     await connection.commit();
                     logger.info(`Webhook: Transaction committed for user ${userId} membership update.`);
@@ -244,8 +312,7 @@ const handleWebhook = async (req, res) => {
                     logger.error(`Webhook DB Error during membership update for user ${userId}:`, dbError);
                     await connection.rollback();
                     logger.info(`Webhook: Transaction rolled back for user ${userId}.`);
-                    // Indicate error to Stripe for potential retry?
-                    // For now, return 500 to signal processing failure.
+                  
                     return res.status(500).json({ error: 'Database update failed during webhook processing.' });
                 }
             } else {
@@ -258,35 +325,63 @@ const handleWebhook = async (req, res) => {
             logger.info('Webhook processing: payment_intent.succeeded', { paymentIntentId: paymentIntent.id });
 
             const bookingId = paymentIntent.metadata.booking_id;
+            const userId = paymentIntent.metadata.user_id; // Get userId from metadata
+            const rewardAppliedMetadata = paymentIntent.metadata.reward_discount_applied; // Get reward info
+
             if (!bookingId) {
                 logger.error('Webhook Error: Missing booking_id in payment intent metadata.', { paymentIntentId: paymentIntent.id });
                 return res.status(200).json({ received: true, error: 'Missing booking_id' });
             }
+            if (!userId) {
+                logger.error('Webhook Error: Missing user_id in payment intent metadata.', { paymentIntentId: paymentIntent.id });
+                return res.status(200).json({ received: true, error: 'Missing user_id' });
+            }
 
-            // Use the existing connection
             await connection.beginTransaction();
             try {
                 logger.info(`Webhook: Updating booking ${bookingId} payment status to 'paid'.`);
                 const [updateResult] = await connection.query(
-                    `UPDATE bookings 
-                     SET payment_status = ?, stripe_payment_intent_id = ? 
-                     WHERE id = ? AND status = ? AND payment_status != ?`,
-                    ['paid', paymentIntent.id, bookingId, 'pending', 'paid']
+                    `UPDATE bookings
+                     SET payment_status = ?, stripe_payment_intent_id = ?
+                     WHERE id = ? AND (status = 'pending' OR status = 'confirmed') AND payment_status != 'paid'`, // Allow update if booking was confirmed before payment webhook arrived
+                    ['paid', paymentIntent.id, bookingId]
                 );
 
                 if (updateResult.affectedRows === 0) {
-                    logger.warn(`Webhook: Booking ${bookingId} not found, not in 'pending' state, or already marked as 'paid'. No update performed.`);
+                    logger.warn(`Webhook: Booking ${bookingId} not found, not in 'pending'/'confirmed' state, or already marked as 'paid'. No booking update performed.`);
+                    // Don't reset points if booking wasn't updated successfully
                 } else {
                     logger.info(`Webhook: Booking ${bookingId} payment status successfully updated to 'paid'.`);
+
+                    // Reset points if a reward was applied for this payment - REMOVED FROM HERE
+                    /*
+                    if (rewardAppliedMetadata && rewardAppliedMetadata !== 'none') {
+                        logger.info(`Webhook: Reward '${rewardAppliedMetadata}' was applied to booking ${bookingId}. Resetting reward points for user ${userId}.`);
+                        try {
+                            await connection.query(
+                                'UPDATE users SET reward_points = 0 WHERE id = ?',
+                                [userId]
+                            );
+                            logger.info(`Webhook: Reward points successfully reset for user ${userId}.`);
+                        } catch (pointResetError) {
+                            logger.error(`Webhook Error: Failed to reset points for user ${userId} after applying reward for booking ${bookingId}.`, pointResetError);
+                            // Decide if this should cause the webhook to fail or just log the error
+                            // For now, log and continue, as payment succeeded.
+                        }
+                    } else {
+                        logger.info(`Webhook: No reward applied to booking ${bookingId}, points not reset.`);
+                    }
+                    */
                 }
+
                 await connection.commit();
-                logger.info(`Webhook: Transaction committed for booking ${bookingId} payment status update.`);
+                logger.info(`Webhook: Transaction committed for booking ${bookingId} payment status update and potential point reset.`);
             } catch (dbError) {
-                logger.error(`Webhook DB Error during booking update for paymentIntent ${paymentIntent.id}:`, dbError);
                 await connection.rollback();
-                logger.info(`Webhook: Transaction rolled back for booking ${bookingId} payment status update.`);
-                // Return 500 to signal processing failure to Stripe
-                return res.status(500).json({ error: 'Database update failed during webhook processing.' });
+                logger.error(`Webhook DB Error processing payment_intent.succeeded for booking ${bookingId}:`, dbError);
+                return res.status(500).json({ received: true, error: 'Database processing error' });
+            } finally {
+
             }
         }
         // Handle failed Payment Intent
@@ -304,14 +399,8 @@ const handleWebhook = async (req, res) => {
              await connection.beginTransaction();
              try {
                  logger.info(`Webhook: Updating booking ${bookingId} to 'failed' due to payment failure.`);
-                 // Option 1: Update status to 'failed'
-                 // const [updateResult] = await connection.query(
-                 //     `UPDATE bookings SET status = ?, payment_status = ? WHERE id = ? AND status = ?`,
-                 //     ['failed', 'failed', bookingId, 'pending']
-                 // );
+              
 
-                 // Option 2: Keep status 'pending', update payment_status to 'failed'
-                 // This might be better if you want admins to review before changing booking status
                  const [updateResult] = await connection.query(
                      `UPDATE bookings SET payment_status = ? WHERE id = ? AND status = ?`,
                      ['failed', bookingId, 'pending']
@@ -342,18 +431,17 @@ const handleWebhook = async (req, res) => {
                  return res.status(500).json({ error: 'Database update failed during webhook processing for failed payment.' });
              }
         }
-        // Add other event types here if needed (e.g., invoice.payment_succeeded for subscriptions)
+        
         else {
             logger.info(`Webhook received: Unhandled event type ${event.type}`);
         }
 
-        // Acknowledge receipt for handled or unhandled events (unless an error was already sent)
+        // Acknowledge receipt for handled or unhandled events 
         res.json({ received: true });
 
     } catch (error) {
-        // Catch unexpected errors during event processing (outside DB transaction)
+        //Catch unexpected errors during event processing 
         logger.error('Webhook Error: Unexpected error in handler:', error);
-        // Don't rollback here as the connection might not be in a transaction or might be released
         res.status(500).json({ error: 'Internal server error during webhook processing.' });
     } finally {
         if (connection) {

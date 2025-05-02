@@ -72,8 +72,48 @@ const updateUserAdmin = async (req, res) => {
     }
 };
 
+// @desc    Add reward points to a user (Admin)
+// @route   POST /api/admin/users/:id/points
+// @access  Private/Admin
+const addPointsToUser = async (req, res) => {
+    const { points } = req.body;
+    const userId = req.params.id;
+
+    // Basic validation
+    if (typeof points !== 'number' || points <= 0 || !Number.isInteger(points)) {
+        return res.status(400).json({ message: 'Invalid points value. Points must be a positive integer.' });
+    }
+
+    try {
+        // Check if user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Add the points
+        const success = await User.addRewardPoints(userId, points);
+
+        if (success) {
+            // Fetch updated user data to return current points
+            const updatedUser = await User.findById(userId);
+            res.json({ 
+                message: `Successfully added ${points} points to user ${userId}.`, 
+                newPointsTotal: updatedUser.reward_points 
+            });
+        } else {
+            // This case might be less likely if the user exists, but handle it
+            res.status(500).json({ message: 'Failed to add points.' });
+        }
+    } catch (error) {
+        console.error('Error in addPointsToUser:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
 module.exports = {
     getAllUsers,
     getUserByIdAdmin,
     updateUserAdmin,
+    addPointsToUser,
 }; 

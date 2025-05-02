@@ -134,7 +134,7 @@ const AdminDashboard = () => {
                     <StatCard
                         title="Total Revenue"
                         value={stats.totalRevenue}
-                        icon={<RevenueIcon fontSize="large" />}
+                        icon={<Typography variant="h4" component="span" sx={{ lineHeight: 1 }}>£</Typography>}
                         color="#2e7d32"
                     />
                 </Grid>

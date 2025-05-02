@@ -19,7 +19,12 @@ import {
     Chip,
     Tooltip,
     TextField,
-    CircularProgress
+    CircularProgress,
+    RadioGroup,
+    FormControlLabel,
+    Radio,
+    FormControl,
+    FormLabel
 } from '@mui/material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -32,6 +37,7 @@ import PaymentProvider from '../payments/PaymentProvider';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../api/axios';
 import { ArrowUpward } from '@mui/icons-material';
+import { CheckCircleOutline } from '@mui/icons-material';
 
 // Styled components
 const StyledDialog = styled(Dialog)(({ theme }) => ({
@@ -95,6 +101,15 @@ const BookingDialog: React.FC<BookingDialogProps> = ({ car, open, onClose, onBoo
     const [discountPercentage, setDiscountPercentage] = useState<number>(0);
     const [totalPrice, setTotalPrice] = useState<number>(0);
     const [bookingId, setBookingId] = useState<number | null>(null);
+    const [userRewardPoints, setUserRewardPoints] = useState<number>(0);
+    const [selectedRewardPoints, setSelectedRewardPoints] = useState<number>(0);
+
+    // Define reward tiers locally or import from a shared location
+    const rewardTiers = [
+        { points: 1, discount: 5, description: '£5 off' }, // Reverted test change
+        { points: 20, discount: 15, description: '£15 off' },
+        { points: 30, discount: 20, description: '£20 off' },
+    ];
 
     // State for Snackbar
     const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -107,6 +122,30 @@ const BookingDialog: React.FC<BookingDialogProps> = ({ car, open, onClose, onBoo
             setMembershipLoading(false);
         }
     }, [user]);
+
+    const fetchUserPoints = async () => {
+        if (!user) return 0;
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return 0;
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/profile`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (!response.ok) {
+                console.error('Failed to fetch user points');
+                return 0;
+            }
+            const data = await response.json();
+            const points = data?.reward_points ?? 0;
+            setUserRewardPoints(points);
+            return points;
+        } catch (err) {
+            console.error('Error fetching user points:', err);
+            return 0;
+        }
+    };
 
     const fetchMembership = async () => {
         try {
@@ -131,35 +170,32 @@ const BookingDialog: React.FC<BookingDialogProps> = ({ car, open, onClose, onBoo
                 // User doesn't have a membership
                 setMembership(null);
                 setDiscountPercentage(0);
-                return;
-            }
-
-            if (!response.ok) {
+            } else if (!response.ok) {
                 throw new Error('Failed to fetch membership data');
-            }
-
-            const data = await response.json();
-            setMembership(data);
-            
-            // Check if data is null before accessing type
-            if (data && data.type) {
-                // Set discount percentage based on membership type
-                switch (data.type) {
-                    case 'basic':
-                        setDiscountPercentage(5);
-                        break;
-                    case 'premium':
-                        setDiscountPercentage(10);
-                        break;
-                    case 'platinum':
-                        setDiscountPercentage(15);
-                        break;
-                    default:
-                        setDiscountPercentage(0);
-                }
             } else {
-                // No membership or type found, ensure discount is 0
-                setDiscountPercentage(0);
+                const data = await response.json();
+                setMembership(data);
+                
+                // Check if data is null before accessing type
+                if (data && data.type) {
+                    // Set discount percentage based on membership type
+                    switch (data.type) {
+                        case 'basic':
+                            setDiscountPercentage(5);
+                            break;
+                        case 'premium':
+                            setDiscountPercentage(10);
+                            break;
+                        case 'platinum':
+                            setDiscountPercentage(15);
+                            break;
+                        default:
+                            setDiscountPercentage(0);
+                    }
+                } else {
+                    // No membership or type found, ensure discount is 0
+                    setDiscountPercentage(0);
+                }
             }
         } catch (err) {
             console.error('Error fetching membership:', err);
@@ -217,12 +253,37 @@ const BookingDialog: React.FC<BookingDialogProps> = ({ car, open, onClose, onBoo
     }, [startDate, endDate, membership, discountPercentage, car.pricePerHour]);
 
     // Pure function that doesn't set state - just calculates the final price
-    const calculateTotalPrice = () => {
-        if (membership && discountPercentage > 0 && discountedPrice > 0) {
-            return discountedPrice;
+    const calculateTotalPrice = useCallback((ignoreReward = false) => {
+        if (!car || !startDate || !endDate) return 0;
+
+        const durationHours = differenceInHours(endDate, startDate);
+        let calculatedPrice = 0;
+
+        if (durationHours > 0 && durationHours <= 24) {
+             calculatedPrice = durationHours * car.pricePerHour;
+        } else if (durationHours > 24) {
+             calculatedPrice = Math.ceil(durationHours / 24) * car.pricePerHour;
         }
-        return originalPrice;
-    };
+
+        // Apply membership discount
+        let priceAfterMembership = calculatedPrice;
+        if (membership && discountPercentage > 0) {
+            priceAfterMembership = calculatedPrice * (1 - discountPercentage / 100);
+        }
+
+        // Apply selected reward discount (unless ignored)
+        let finalPrice = priceAfterMembership;
+        if (!ignoreReward && selectedRewardPoints > 0) {
+            let rewardDiscount = 0;
+            if (selectedRewardPoints === 1) rewardDiscount = 5;
+            else if (selectedRewardPoints === 20) rewardDiscount = 15;
+            else if (selectedRewardPoints === 30) rewardDiscount = 20;
+            // Ensure price doesn't go below zero
+            finalPrice = Math.max(0, priceAfterMembership - rewardDiscount);
+        }
+
+        return parseFloat(finalPrice.toFixed(2));
+    }, [car, startDate, endDate, membership, discountPercentage, selectedRewardPoints]);
 
     const formatDateForMySQL = (date: Date) => {
         if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
@@ -251,91 +312,145 @@ const BookingDialog: React.FC<BookingDialogProps> = ({ car, open, onClose, onBoo
     };
 
     const handleNext = async () => {
-        if (activeStep === 0) {
-            console.log('Starting booking process...');
-            if (!checkAuthentication()) {
-                return;
-            }
-
+        console.log(`[BookingDialog] handleNext called, current step: ${activeStep}`);
+        if (activeStep === 0) { // Moving from Step 0 (Select Dates) to Step 1 (Review & Pay)
+            // Validate dates first
             if (!startDate || !endDate) {
                 setError('Please select both start and end dates');
                 return;
             }
-
             if (endDate < startDate) {
                 setError('End date cannot be before start date');
                 return;
             }
-
-            // Check if user has the required membership level
             if (!isMembershipSufficient()) {
                 setError(`You need ${car.required_membership} membership or higher to book this car. Please upgrade your membership to continue.`);
                 return;
             }
+            setError(''); // Clear previous errors
 
-            const totalPrice = calculateTotalPrice();
-            if (totalPrice <= 0) {
-                setError('Invalid price calculation');
-                return;
-            }
-
-            // Create payment intent
+            // Fetch points when moving to the review step
+            console.log('[BookingDialog] Fetching user points before moving to step 1...');
+            setLoading(true); // Show loading indicator while fetching points
             try {
-                console.log('Creating payment intent...');
-                setLoading(true);
-                setError('');
-
-                console.log('Sending payment intent request with amount:', totalPrice);
-
-                // Use our API middleware with error handling
-                const response = await api.post('/api/payments/create-payment-intent', {
-                        amount: totalPrice,
-                        carId: car.id.toString(),
-                        startDate: formatDateForMySQL(startDate),
-                        endDate: formatDateForMySQL(endDate)
-                });
-
-                console.log('Payment intent response status:', response.status);
-                
-                const data = response.data;
-                console.log('Payment intent created successfully');
-                setClientSecret(data.clientSecret);
-                if (data.bookingId) {
-                    setBookingId(data.bookingId); 
-                    console.log('Stored bookingId:', data.bookingId);
-                } else {
-                    console.error('Booking ID not received from backend!');
-                    setError('Failed to get booking ID from server.');
-                    return; 
-                }
-                setActiveStep(1);
+                await fetchUserPoints();
+                console.log('[BookingDialog] Points fetch initiated, advancing to step 1 shortly.');
+                setTimeout(() => setActiveStep(1), 50);
             } catch (err) {
-                console.error('Payment intent creation error:', err);
-                setError(err instanceof Error ? err.message : 'Failed to initialize payment');
+                console.error('[BookingDialog] Error fetching points in handleNext:', err);
+                setError('Could not load reward points. Please try again.');
             } finally {
                 setLoading(false);
             }
+
+            // --- REMOVED Payment Intent creation from here ---
+
+        } else if (activeStep === 1) {
+            // This case might not be needed if step 1 directly handles payment intent
+            console.log('[BookingDialog] Next clicked on step 1 - should trigger payment intent via dedicated button.');
+            // If there was a separate button for "Next" on step 1, it would call handlePayment here.
         }
     };
 
     const handleBack = () => {
-        setActiveStep((prevStep) => prevStep - 1);
+        setActiveStep((prevActiveStep) => prevActiveStep - 1);
+        setClientSecret('');
         setError('');
     };
 
-    const handlePaymentSuccess = async (paymentIntentId: string) => {
-        console.log('BookingDialog: handlePaymentSuccess triggered! Intent ID:', paymentIntentId, 'Booking ID:', bookingId);
-        setLoading(false);
-        setError('');
-        setShowSuccess(true);
-        setSnackbarMessage('Booking Successful! Redirecting to My Bookings...');
-        setSnackbarOpen(true);
+    const handlePayment = async () => {
+        if (!startDate || !endDate || !car) {
+            setError('Please select valid dates and ensure car data is available.');
+            return;
+        }
+        if (endDate <= startDate) {
+            setError('End date must be after start date.');
+            return;
+        }
 
-        setTimeout(() => {
+        setLoading(true);
+        setError('');
+        setClientSecret('');
+
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                throw new Error('Authentication token not found.');
+            }
+
+            const bookingDetails = {
+                carId: car.id,
+                startDate: format(startDate, "yyyy-MM-dd HH:mm:ss"),
+                endDate: format(endDate, "yyyy-MM-dd HH:mm:ss"),
+                amount: calculateTotalPrice(true),
+                appliedRewardPoints: selectedRewardPoints
+            };
+
+            console.log('Sending to create-payment-intent:', bookingDetails);
+
+            // Request payment intent from backend
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/payments/create-payment-intent`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify(bookingDetails),
+            });
+
+            const paymentData = await response.json();
+
+            if (!response.ok) {
+                throw new Error(paymentData.error || 'Failed to initialize payment');
+            }
+
+            console.log('Payment intent created:', paymentData);
+            setClientSecret(paymentData.clientSecret);
+            setBookingId(paymentData.bookingId);
+            setOriginalPrice(paymentData.originalAmount || calculateTotalPrice(true));
+            setDiscountedPrice(paymentData.discountedAmount || calculateTotalPrice());
+            setTotalPrice(paymentData.discountedAmount || calculateTotalPrice());
+
+        } catch (err: any) {
+            console.error('Booking/Payment Error:', err);
+            setError(err.message || 'Failed to process booking. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePaymentSuccess = (paymentIntentId: string) => {
+        console.log('Payment successful! Intent ID:', paymentIntentId);
+        setShowSuccess(true);
+        setActiveStep(steps.length);
+        if (onBookingComplete) {
             onBookingComplete(car.id);
-            onClose();
-            navigate('/dashboard/bookings');
-        }, 3000);
+        }
+        // Navigate to bookings page after success
+        navigate('/dashboard/bookings');
+        
+        setTimeout(() => {
+            handleClose();
+        }, 1000); // Reduced delay slightly
+    };
+
+    const handleClose = () => {
+        onClose();
+        setTimeout(() => {
+            setActiveStep(0);
+            setStartDate(null);
+            setEndDate(null);
+            setError('');
+            setLoading(false);
+            setShowSuccess(false);
+            setClientSecret('');
+            setBookingId(null);
+            setOriginalPrice(0);
+            setDiscountedPrice(0);
+            setTotalPrice(0);
+            setUserRewardPoints(0);
+            setSelectedRewardPoints(0);
+        }, 300);
     };
 
     const isMembershipSufficient = () => {
@@ -663,17 +778,59 @@ const BookingDialog: React.FC<BookingDialogProps> = ({ car, open, onClose, onBoo
                             </Box>
                         </Paper>
                         
-                        {/* Temporarily commented out for debugging admin login issue */}
-                        {clientSecret && (
+                        <FormControl component="fieldset" sx={{ mt: 2, mb: 2, width: '100%' }}>
+                            <FormLabel component="legend">Apply Reward Points (Current: {userRewardPoints})</FormLabel>
+                            <RadioGroup
+                                aria-label="reward-points"
+                                name="reward-points-group"
+                                value={selectedRewardPoints}
+                                onChange={(e) => setSelectedRewardPoints(Number(e.target.value))}
+                            >
+                                <FormControlLabel value={0} control={<Radio size="small" />} label="Do not apply points" />
+                                {rewardTiers.map((tier) => (
+                                    <FormControlLabel 
+                                        key={tier.points}
+                                        value={tier.points}
+                                        control={<Radio size="small" />} 
+                                        label={`${tier.points} Points: ${tier.description}`}
+                                        disabled={userRewardPoints < tier.points}
+                                    />
+                                ))}
+                            </RadioGroup>
+                        </FormControl>
+                        <Divider sx={{ my: 2 }} />
+
+                        <Box sx={{ mb: 3, p: 2, bgcolor: 'primary.light', borderRadius: 2 }}>
+                            <Typography variant="body2" color="primary.contrastText">
+                                Total Price
+                            </Typography>
+                            <Typography 
+                                variant="h5" 
+                                color="primary.contrastText" 
+                                fontWeight="bold"
+                            >
+                                £{calculateTotalPrice().toFixed(2)}
+                                {selectedRewardPoints > 0 && (
+                                    <Typography component="span" variant="caption" sx={{ ml: 1 }}>
+                                        (with reward applied)
+                                    </Typography>
+                                )}
+                            </Typography>
+                        </Box>
+                        
+                        {clientSecret ? (
                             <Box sx={{ mt: 3 }}>
                                 <PaymentProvider
                                     clientSecret={clientSecret}
                                     onSuccess={handlePaymentSuccess}
-                                    onError={(error: any) => setError(error?.message || 'Payment failed')}
+                                    onError={(errorMsg: string) => setError(errorMsg || 'Payment failed')}
                                     amount={calculateTotalPrice()}
                                 />
                             </Box>
+                        ) : (
+                           null
                         )}
+                        {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
                     </Box>
                 );
             default:
@@ -681,11 +838,21 @@ const BookingDialog: React.FC<BookingDialogProps> = ({ car, open, onClose, onBoo
         }
     };
 
+    const renderSuccessStep = () => (
+        <Box sx={{ textAlign: 'center', p: 4 }}>
+            <CheckCircleOutline color="success" sx={{ fontSize: 60, mb: 2 }} />
+            <Typography variant="h5" gutterBottom>Booking Successful!</Typography>
+            <Typography>Your payment has been processed and your booking is confirmed.</Typography>
+            <Typography sx={{ mt: 1 }}>Redirecting you shortly...</Typography>
+            <CircularProgress sx={{ mt: 2 }} />
+        </Box>
+    );
+
     return (
         <>
             <StyledDialog 
                 open={open} 
-                onClose={onClose} 
+                onClose={handleClose}
                 maxWidth="sm" 
                 fullWidth
                 sx={{ zIndex: 1300 }}
@@ -744,44 +911,25 @@ const BookingDialog: React.FC<BookingDialogProps> = ({ car, open, onClose, onBoo
                 </DialogContent>
                 <DialogActions sx={{ p: 3 }}>
                     <Button 
-                        onClick={onClose}
+                        onClick={handleClose} 
                         variant="outlined"
-                        sx={{ borderRadius: 2 }}
+                        sx={{ borderRadius: 2, mr: 'auto' }}
                     >
                         Cancel
                     </Button>
-                    {activeStep > 0 && (
-                        <Button 
-                            onClick={handleBack}
-                            variant="outlined"
-                            sx={{ borderRadius: 2 }}
-                        >
-                            Back
-                        </Button>
-                    )}
-                    {activeStep === 0 && (
-                        <Tooltip
-                            title={!isMembershipSufficient() ? 
-                                `You need ${car.required_membership} membership to book this car` : 
-                                (!startDate || !endDate ? "Please select dates" : "")}
-                            placement="top"
-                            arrow
-                        >
-                            <span>
-                        <Button
-                            onClick={handleNext}
-                            variant="contained"
-                                    disabled={loading || !startDate || !endDate || !isMembershipSufficient()}
-                            sx={{ 
-                                borderRadius: 2,
-                                minWidth: 100
-                            }}
-                        >
-                            {loading ? 'Processing...' : 'Next'}
-                        </Button>
-                            </span>
-                        </Tooltip>
-                    )}
+                    {activeStep === 1 && !clientSecret && (
+                         <Button onClick={handleBack} sx={{ borderRadius: 2 }}>Back</Button>
+                    )} 
+                    {!clientSecret && activeStep < steps.length && (
+                         <Button 
+                             variant="contained" 
+                             onClick={activeStep === 0 ? handleNext : handlePayment}
+                             disabled={loading || (activeStep === 0 && (!startDate || !endDate || endDate <= startDate || !isMembershipSufficient()))} 
+                             sx={{ borderRadius: 2 }} 
+                         > 
+                             {loading ? <CircularProgress size={24} /> : (activeStep === 0 ? 'Next' : 'Proceed to Payment')} 
+                         </Button> 
+                    )} 
                 </DialogActions>
             </StyledDialog>
             <Snackbar

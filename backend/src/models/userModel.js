@@ -24,6 +24,7 @@ class User {
                 status ENUM('active', 'blocked') DEFAULT 'active',
                 is_verified BOOLEAN DEFAULT FALSE,
                 verification_token VARCHAR(255),
+                reward_points INT DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
@@ -154,6 +155,7 @@ class User {
                 driving_license_country, address, city, postcode, 
                 emergency_contact_name, emergency_contact_number,
                 role, status, is_verified, 
+                reward_points,
                 created_at, updated_at 
             FROM users 
             WHERE id = ?
@@ -518,6 +520,7 @@ class User {
                 driving_license_country, address, city, postcode, 
                 emergency_contact_name, emergency_contact_number,
                 role, status, is_verified, 
+                reward_points,
                 created_at, updated_at 
             FROM users 
             ORDER BY last_name, first_name
@@ -582,6 +585,25 @@ class User {
             if (error.code === 'ER_DUP_ENTRY') {
                 throw new Error('Email address already in use.');
             }
+            throw error;
+        }
+    }
+
+    // New method to add reward points
+    static async addRewardPoints(userId, pointsToAdd) {
+        if (pointsToAdd <= 0) {
+            throw new Error('Points to add must be positive.');
+        }
+        const query = `
+            UPDATE users 
+            SET reward_points = reward_points + ? 
+            WHERE id = ?
+        `;
+        try {
+            const [result] = await db.query(query, [pointsToAdd, userId]);
+            return result.affectedRows > 0;
+        } catch (error) {
+            console.error('Error adding reward points:', error);
             throw error;
         }
     }
