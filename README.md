@@ -1,7 +1,7 @@
 
 # Car Sharing Web Application
 
-A comprehensive car-sharing platform that allows users to rent vehicles through a user-friendly web interface. This project is developed as part of my final year university project.
+A comprehensive car-sharing platform that allows users to rent vehicles through a user-friendly web interface.
 
 ## Features
 
@@ -44,7 +44,7 @@ car-sharing-app/
 1. Clone the repository
 ( bash git clone https://github.com/DanielUpTop/car-sharing-web-app.git)
 
-2. Install dependencies (will be added soon)
+2. Install dependencies 
 (bash
 Backend dependencies
 cd server
@@ -54,11 +54,11 @@ cd client
 npm install)
 
 
-3. Configure environment variables (will be added soon)
+3. Configure environment variables 
 
    
 
-4. Run the application (will be added soon)
+4. Run the application 
 Run backend - cd server
               npm start
 
@@ -77,9 +77,6 @@ Run frontend - cd client
 - Final Year Computer Science Project
 - University of Leicester
 
-## License
-
-This project is part of my university coursework and is not licensed for public use.
 
 # Development Phases
 
