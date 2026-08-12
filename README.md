@@ -69,7 +69,7 @@ Run frontend - cd client
 
 
 ## Current Status
-🚧 Project has been completed and submitted.
+🚧 Project has been completed.
 
 ## Author
 
