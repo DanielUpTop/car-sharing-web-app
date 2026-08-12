@@ -74,8 +74,6 @@ Run frontend - cd client
 ## Author
 
 - Daniel Ahenkorah
-- Final Year Computer Science Project
-- University of Leicester
 
 
 # Development Phases
